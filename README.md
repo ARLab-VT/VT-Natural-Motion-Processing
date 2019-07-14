@@ -4,9 +4,7 @@
 
 - [Layout](#project-layout)
 - [Workflow](#workflow)
-- [Tools](#tools)
-- [Python VEnv](#python-virtual-environment)
-- [Research](#research)
+- [Conda Environment](#conda-environment)
 
 ## Project Layout
 
