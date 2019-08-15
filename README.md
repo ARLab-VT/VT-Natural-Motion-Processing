@@ -8,9 +8,13 @@
 
 ## Project Layout
 
-    joint-angle-prediction/                                           source code for joint angle prediction using PyTorch
-    kinematic-modeling/                                               source code for kinematic modeling using PyTorch
-    common/                                                           common files used by main parts of the project
+    models/                                                        saved models
+    notebooks/                                                     notebooks used during rapid prototyping
+    src/                                                           source files for prepping data, training models, running tests, and visualizing outputs
+        data/                                                      Matlab code for converting MVNX files to CSV files
+        common/                                                    common functions and models used during training
+        tests/                                                     source code for running tests
+        visualization                                              source code for visualizing model outputs
 
 ## Workflow
 
