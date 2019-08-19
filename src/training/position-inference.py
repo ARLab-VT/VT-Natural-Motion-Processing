@@ -40,7 +40,7 @@ if __name__ == "__main__":
         filenames, data_path, num_files, orientation_requests, seq_length)
 
     position, position_scaler = read_data(
-        filenames, data_path, num_files, position_requests,  seq_length, request_type='Position')
+        filenames, data_path, num_files, position_requests, seq_length, request_type='Position')
 
     position = np.flip(position, axis=1).copy()
 
