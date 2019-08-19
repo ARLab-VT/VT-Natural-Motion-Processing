@@ -78,10 +78,13 @@ if __name__ == "__main__":
 
     criterion = nn.L1Loss()
 
-    encoder, encoder_opt = get_encoder(encoder_feature_size, device)
-    decoder, decoder_opt = get_decoder(decoder_feature_size, device)
+    encoder, encoder_opt = get_encoder(
+        encoder_feature_size, device, bidirectional=True)
+    decoder, decoder_opt = get_attn_decoder(
+        decoder_feature_size, 'dot', device, bidirectional_encoder=True)
 
     models = (encoder, decoder)
     opts = (encoder_opt, decoder_opt)
 
-    fit(models, opts, epochs, dataloaders, criterion, position_scaler)
+    fit(models, opts, epochs, dataloaders, criterion,
+        position_scaler, use_attention=True)

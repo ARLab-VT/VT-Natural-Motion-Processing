@@ -9,7 +9,6 @@ cryptography==2.6.1
 cycler==0.10.0
 decorator==4.4.0
 defusedxml==0.5.0
-einops==0.1.0
 entrypoints==0.3
 gunicorn==19.9.0
 idna==2.8

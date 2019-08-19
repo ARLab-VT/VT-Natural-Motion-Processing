@@ -34,7 +34,7 @@ def showPlot(points, epochs):
     points = np.array(points)
     plt.figure()
     fig, ax = plt.subplots()
-    x = range(1, epochs+1)
+    x = range(1, epochs + 1)
     plt.plot(x, points[:, 0], 'b-')
     plt.plot(x, points[:, 1], 'r-')
     plt.legend(['training loss', 'val loss'])
@@ -131,7 +131,7 @@ def fit(models, opts, epochs, dataloaders, criterion, scaler,
         if update_learning_rates is not None:
             opts = update_learning_rates(opts, epoch)
 
-        print("Epoch", str(epoch+1) + "/" + str(epochs))
+        print("Epoch", str(epoch + 1) + "/" + str(epochs))
 
         for index, data in enumerate(train_dataloader, 0):
             batch_size = len(data[0])
@@ -151,9 +151,9 @@ def fit(models, opts, epochs, dataloaders, criterion, scaler,
                 (index + 1) / len(train_dataloader) * 30)
             amount_incomplete = (30 - amount_complete)
             progress_bar = "[" + amount_complete * \
-                "=" + amount_incomplete*"-" + "]"
+                "=" + amount_incomplete * "-" + "]"
 
-            print("\r%d/%d" % (batch_size*(index+1), batch_size*len(train_dataloader)),
+            print("\r%d/%d" % (batch_size * (index + 1), batch_size * len(train_dataloader)),
                   progress_bar,
                   "- Time elapsed: %.2fs" % total_time,
                   "- Loss: %.8f" % loss,
@@ -170,7 +170,7 @@ def fit(models, opts, epochs, dataloaders, criterion, scaler,
         val_loss = np.sum(val_losses) / len(val_losses)
         scaled_val_loss = np.sum(scaled_val_losses) / len(scaled_val_losses)
 
-        if epoch == epochs-1:
+        if epoch == epochs - 1:
             scaled_val_losses_over_time = torch.stack(
                 scaled_val_losses_over_time)
             scaled_val_loss_over_time = scaled_val_losses_over_time.mean(0)

@@ -6,9 +6,9 @@ from sklearn.preprocessing import RobustScaler
 
 def get_body_info_map():
 
-    orientation_indices = [list(range(i, i+4)) for i in range(0, 89, 4)]
-    position_indices = [list(range(i, i+3)) for i in range(92, 159, 3)]
-    joint_angle_indices = [list(range(i, i+3)) for i in range(161, 225, 3)]
+    orientation_indices = [list(range(i, i + 4)) for i in range(0, 89, 4)]
+    position_indices = [list(range(i, i + 3)) for i in range(92, 159, 3)]
+    joint_angle_indices = [list(range(i, i + 3)) for i in range(161, 225, 3)]
 
     segment_keys = ['Pelvis', 'L5', 'L3', 'T12', 'T8', 'Neck', 'Head',
                     'RightShoulder', 'RightUpperArm', 'RightForeArm', 'RightHand',
@@ -51,7 +51,7 @@ def discard_remainder(data, seq_length):
 
 def reshape_to_sequences(data, seq_length=120):
     data = discard_remainder(data, seq_length)
-    data = data.reshape(data.shape[0]//seq_length, seq_length, data.shape[1])
+    data = data.reshape(data.shape[0] // seq_length, seq_length, data.shape[1])
     return data
 
 
@@ -71,16 +71,16 @@ def pad_sequences(sequences, maxlen, start_char=False, padding='post'):
 
 
 def split_sequences(data, seq_length=120):
-    split_indices = seq_length//2
+    split_indices = seq_length // 2
 
     split_data = [(data[i, :split_indices, :], data[i, split_indices:, :])
                   for i in range(data.shape[0])]
 
     encoder_input_data = np.array([pad_sequences(
-        sequences[0], seq_length//2, padding='pre') for sequences in split_data])
+        sequences[0], seq_length // 2, padding='pre') for sequences in split_data])
 
     decoder_target_data = np.array(
-        [pad_sequences(sequences[1], seq_length//2) for sequences in split_data])
+        [pad_sequences(sequences[1], seq_length // 2) for sequences in split_data])
 
     return encoder_input_data, decoder_target_data
 
