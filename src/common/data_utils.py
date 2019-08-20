@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import RobustScaler
+from torch.utils.data import TensorDataset, DataLoader, random_split
 
 
 def get_body_info_map():
@@ -117,3 +118,22 @@ def read_data(filenames, data_path, n, requests, seq_length, request_type=None):
 
     data = reshape_to_sequences(data, seq_length=seq_length)
     return data, scaler
+
+
+def setup_dataloaders(encoder_input_data, decoder_target_data, batch_size, split_size):
+    dataset = TensorDataset(encoder_input_data, decoder_target_data)
+
+    train_size_approx = int(split_size * len(dataset))
+    train_size = train_size_approx - (train_size_approx % batch_size)
+    val_size = len(dataset) - train_size
+
+    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+
+    train_dataloader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True)
+    val_dataloader = DataLoader(
+        val_dataset, batch_size=batch_size, shuffle=False)
+
+    dataloaders = (train_dataloader, val_dataloader)
+
+    return dataloaders
