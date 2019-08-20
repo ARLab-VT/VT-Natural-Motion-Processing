@@ -16,8 +16,8 @@ class EncoderRNN(nn.Module):
         self.gru = nn.GRU(input_size, hidden_size, bidirectional=bidirectional)
         self.dropout = nn.Dropout(dropout)
 
-        if self.bidirectional:
-            self.fc = nn.Linear(hidden_size * 2, hidden_size)
+        self.directions = 2 if bidirectional else 1
+        self.fc = nn.Linear(hidden_size * self.directions, hidden_size)
 
     def forward(self, input):
         output, hidden = self.gru(input)
@@ -63,34 +63,44 @@ class Attention(nn.Module):
         self.batch_size = batch_size
         self.hidden_size = hidden_size
         self.method = method
-        self.directions = 2 if bidirectional else 1
+        self.directions = 2 if bidirectional_encoder else 1
 
         if method == 'dot':
             pass
         elif method == 'general':
             self.Wa = nn.Linear(
-                hidden_size, self.directions*hidden_size, bias=False)
+                hidden_size, self.directions * hidden_size, bias=False)
         elif method == 'concat':
-            self.Wa = nn.Linear((2*hidden_size) + hidden_size,
+            self.Wa = nn.Linear((2 * hidden_size) + hidden_size,
                                 hidden_size, bias=False)
             self.va = nn.Parameter(torch.rand(hidden_size))
 
     def forward(self, hidden, encoder_outputs):
+        """
+        Computes an attention score
+        :param hidden: (1, batch_size, hidden_dim)
+        :param encoder_outputs: (seq_len, batch_size, directions * hidden_dim)
+        :return: a softmax score (batch_size)
+        """
 
-        #hidden = [1, batch_size, hidden_size]
-        #encoder_outputs = [seq_len, batch_size, 2*hidden_size]
+        assert list(hidden.shape) == [1, self.batch_size, self.hidden_size]
 
         assert self.batch_size == encoder_outputs.shape[1]
+        assert self.directions * self.hidden_size == encoder_outputs.shape[2]
         self.seq_len = encoder_outputs.shape[0]
 
         hidden = hidden.squeeze(0)
-        #hidden = [batch_size, hidden_size]
+
+        assert list(hidden.shape) == [self.batch_size, self.hidden_size]
 
         encoder_outputs = encoder_outputs.permute(1, 0, 2)
-        #encoder_outputs = [batch_size, seq_len, 2*hidden_size]
+
+        assert list(encoder_outputs.shape) == [
+            self.batch_size, self.seq_len, self.directions * self.hidden_size]
 
         score = self._score(hidden, encoder_outputs)
-        #score = [batch_size, seq_len]
+
+        assert list(score.shape) == [self.batch_size, self.seq_len]
 
         return F.softmax(score, dim=1)
 
@@ -134,19 +144,22 @@ class AttnDecoderRNN(nn.Module):
         self.features_dim = features_dim
         self.attention = attention
 
-        self.directions = 2 if bidirectional else 1
+        self.directions = 2 if bidirectional_encoder else 1
 
-        self.rnn = nn.GRU(self.directions*enc_hidden_size +
+        self.rnn = nn.GRU(self.directions * enc_hidden_size +
                           features_dim, dec_hidden_size)
 
-        self.out = nn.Linear(self.directions*enc_hidden_size +
+        self.out = nn.Linear(self.directions * enc_hidden_size +
                              dec_hidden_size + features_dim, output_dim)
 
     def forward(self, input, hidden, encoder_outputs):
-
-        # input = [1, batch size, enc hid dem]
-        # hidden = [1, batch size, dec hid dim]
-        # encoder_outputs = [src sent len, batch size, enc hid dim * 2]
+        """
+        Computes an attention score
+        :param input: (1, batch_size, enc_hidden_dim)
+        :param hidden: (1, batch_size, dec_hidden_dim)
+        :param encoder_outputs: (seq_len, batch_size, hidden_dim)
+        :return: output (1, batch_size, output_dim) and hidden (1, batch_size, dec_hidden_dim)
+        """
 
         a = self.attention(hidden, encoder_outputs)
 

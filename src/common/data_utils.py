@@ -2,13 +2,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import RobustScaler
+from torch.utils.data import TensorDataset, DataLoader, random_split
 
 
 def get_body_info_map():
 
-    orientation_indices = [list(range(i, i+4)) for i in range(0, 89, 4)]
-    position_indices = [list(range(i, i+3)) for i in range(92, 159, 3)]
-    joint_angle_indices = [list(range(i, i+3)) for i in range(161, 225, 3)]
+    orientation_indices = [list(range(i, i + 4)) for i in range(0, 89, 4)]
+    position_indices = [list(range(i, i + 3)) for i in range(92, 159, 3)]
+    joint_angle_indices = [list(range(i, i + 3)) for i in range(161, 225, 3)]
 
     segment_keys = ['Pelvis', 'L5', 'L3', 'T12', 'T8', 'Neck', 'Head',
                     'RightShoulder', 'RightUpperArm', 'RightForeArm', 'RightHand',
@@ -51,7 +52,7 @@ def discard_remainder(data, seq_length):
 
 def reshape_to_sequences(data, seq_length=120):
     data = discard_remainder(data, seq_length)
-    data = data.reshape(data.shape[0]//seq_length, seq_length, data.shape[1])
+    data = data.reshape(data.shape[0] // seq_length, seq_length, data.shape[1])
     return data
 
 
@@ -71,16 +72,16 @@ def pad_sequences(sequences, maxlen, start_char=False, padding='post'):
 
 
 def split_sequences(data, seq_length=120):
-    split_indices = seq_length//2
+    split_indices = seq_length // 2
 
     split_data = [(data[i, :split_indices, :], data[i, split_indices:, :])
                   for i in range(data.shape[0])]
 
     encoder_input_data = np.array([pad_sequences(
-        sequences[0], seq_length//2, padding='pre') for sequences in split_data])
+        sequences[0], seq_length // 2, padding='pre') for sequences in split_data])
 
     decoder_target_data = np.array(
-        [pad_sequences(sequences[1], seq_length//2) for sequences in split_data])
+        [pad_sequences(sequences[1], seq_length // 2) for sequences in split_data])
 
     return encoder_input_data, decoder_target_data
 
@@ -117,3 +118,22 @@ def read_data(filenames, data_path, n, requests, seq_length, request_type=None):
 
     data = reshape_to_sequences(data, seq_length=seq_length)
     return data, scaler
+
+
+def setup_dataloaders(encoder_input_data, decoder_target_data, batch_size, split_size):
+    dataset = TensorDataset(encoder_input_data, decoder_target_data)
+
+    train_size_approx = int(split_size * len(dataset))
+    train_size = train_size_approx - (train_size_approx % batch_size)
+    val_size = len(dataset) - train_size
+
+    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+
+    train_dataloader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True)
+    val_dataloader = DataLoader(
+        val_dataset, batch_size=batch_size, shuffle=False)
+
+    dataloaders = (train_dataloader, val_dataloader)
+
+    return dataloaders
