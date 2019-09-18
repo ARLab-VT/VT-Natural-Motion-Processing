@@ -11,7 +11,7 @@ from pathlib import Path
 import torch
 from torch import nn, optim, Tensor
 import torch.nn.functional as F
-from torch.utils.data import TensorDataset, DataLoader, random_split
+from torch.utils.data import TensorDataset, DataLoader, random_split, Subset
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import RobustScaler
@@ -20,6 +20,7 @@ import random
 import os
 import time
 import argparse
+import h5py
 
 torch.manual_seed(42)
 
@@ -27,8 +28,12 @@ torch.manual_seed(42)
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-c', '--csv-files',
-                        help='path to csv files for reading data')
+    parser.add_argument('-f', '--data-file',
+                        help='path to h5 file for reading data')
+    parser.add_argument('--batch-size',
+                        help='batch size for training', default=32)
+    parser.add_argument('--num-epochs',
+                        help='number of epochs for training', default=1)
     parser.add_argument('--bidirectional',
                         help='will use bidirectional encoder', default=False, action='store_true')
     parser.add_argument('--attention',
@@ -36,7 +41,7 @@ def parse_args():
 
     args = parser.parse_args()
 
-    if args.csv_files is None:
+    if args.data_file is None:
         parser.print_help()
 
     return args
@@ -48,41 +53,33 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    data_path = Path(args.csv_files)
-    filenames = os.listdir(data_path)
+    data_file = Path(args.data_file)
+    f = h5py.File(args.data_file, 'r')
 
-    orientation_requests = {'Orientation': [
-        'T12', 'RightUpperArm', 'RightForeArm']}
-    position_requests = {'Position': ['Pelvis', 'RightForeArm']}
-    num_files = 1
-    seq_length = 20
+    X, y = torch.tensor(f['X']), torch.tensor(f['y'])
+    train_indices, val_indices = f['train_indices'], f['val_indices']
 
-    orientation, orientation_scaler = read_data(
-        filenames, data_path, num_files, orientation_requests, seq_length)
+    y_size = tuple(y.size())
+    y = y.view(y_size[0] * y_size[1], -1)
+    scaler = RobustScaler().fit(y)
+    y = torch.tensor(scaler.transform(y))
+    y = y.view(y_size)
 
-    position, position_scaler = read_data(
-        filenames, data_path, num_files, position_requests, seq_length, request_type='Position')
+    dataset = TensorDataset(X, y)
 
-    position = np.flip(position, axis=1).copy()
+    train_dataset = Subset(dataset, train_indices)
+    val_dataset = Subset(dataset, val_indices)
 
-    encoder_input_data, decoder_target_data = orientation, position
+    datasets = (train_dataset, val_dataset)
 
-    batch_size = 32
-    encoder_input_data = discard_remainder(encoder_input_data, batch_size)
-    decoder_target_data = discard_remainder(decoder_target_data, batch_size)
-
-    encoder_input_data = torch.tensor(encoder_input_data).to(device)
-    decoder_target_data = torch.tensor(decoder_target_data).to(device)
-
-    split_size = 0.8
-    dataloaders = setup_dataloaders(
-        encoder_input_data, decoder_target_data, batch_size, split_size)
+    batch_size = int(args.batch_size)
+    dataloaders = setup_dataloaders(datasets, batch_size)
 
     print("Number of training samples:", len(dataloaders[0].dataset))
     print("Number of validation samples:", len(dataloaders[1].dataset))
 
-    encoder_feature_size = encoder_input_data.shape[-1]
-    decoder_feature_size = decoder_target_data.shape[-1]
+    encoder_feature_size = X.shape[-1]
+    decoder_feature_size = y.shape[-1]
 
     encoder, encoder_optim = get_encoder(
         encoder_feature_size, device, bidirectional=args.bidirectional)
@@ -95,8 +92,8 @@ if __name__ == "__main__":
 
     models = (encoder, decoder)
     optims = (encoder_optim, decoder_optim)
-    epochs = 1
+    epochs = int(args.num_epochs)
     criterion = nn.L1Loss()
 
     fit(models, optims, epochs, dataloaders, criterion,
-        position_scaler, use_attention=args.attention)
+        scaler, device, use_attention=args.attention)

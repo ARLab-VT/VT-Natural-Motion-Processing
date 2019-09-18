@@ -109,30 +109,30 @@ def read_data(filenames, data_path, n, requests, seq_length, request_type=None):
             data = np.concatenate((data, data_temp), axis=0)
 
     print("Done with reading files")
-
-    scaler = RobustScaler().fit(data)
-    data = scaler.transform(data)
-
     print("Number of frames in dataset:", data.shape[0])
     print("Number of bytes:", data.nbytes)
 
     data = reshape_to_sequences(data, seq_length=seq_length)
-    return data, scaler
+    return data
 
 
-def setup_dataloaders(encoder_input_data, decoder_target_data, batch_size, split_size):
+def setup_datasets(encoder_input_data, decoder_target_data, batch_size, split_size):
     dataset = TensorDataset(encoder_input_data, decoder_target_data)
 
     train_size_approx = int(split_size * len(dataset))
     train_size = train_size_approx - (train_size_approx % batch_size)
     val_size = len(dataset) - train_size
 
-    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+    train_subset, val_subset = random_split(dataset, [train_size, val_size])
 
+    return dataset, train_subset.indices, val_subset.indices
+
+
+def setup_dataloaders(datasets, batch_size):
     train_dataloader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True)
+        datasets[0], batch_size=batch_size, shuffle=True)
     val_dataloader = DataLoader(
-        val_dataset, batch_size=batch_size, shuffle=False)
+        datasets[1], batch_size=batch_size, shuffle=False)
 
     dataloaders = (train_dataloader, val_dataloader)
 
