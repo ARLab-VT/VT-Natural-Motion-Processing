@@ -80,9 +80,12 @@ def plotLossesOverTime(losses_over_time):
     plt.ylabel('scaled MAE loss')
 
 
-def loss_batch(data, models, opts, criterion, scaler=None, teacher_forcing_ratio=0.0, use_attention=False):
+def loss_batch(data, models, opts, criterion, device, scaler=None, teacher_forcing_ratio=0.0, use_attention=False):
     encoder, decoder = models
     input_batch, target_batch = data
+
+    input_batch = input_batch.to(device)
+    target_batch = target_batch.to(device)
 
     if opts is not None:
         encoder.train(), decoder.train()
@@ -144,7 +147,7 @@ def loss_batch(data, models, opts, criterion, scaler=None, teacher_forcing_ratio
     return loss.item() / seq_length, scaled_loss, scaled_loss_over_time
 
 
-def fit(models, optims, epochs, dataloaders, criterion, scaler,
+def fit(models, optims, epochs, dataloaders, criterion, scaler, device,
         teacher_forcing_ratio=0.0,
         update_learning_rates=None,
         use_attention=False,
@@ -171,7 +174,7 @@ def fit(models, optims, epochs, dataloaders, criterion, scaler,
         for index, data in enumerate(train_dataloader, 0):
             with Timer() as timer:
                 loss, _, _ = loss_batch(data, models,
-                                        optims, criterion,
+                                        optims, criterion, device,
                                         use_attention=use_attention)
 
                 losses.append(loss)
@@ -180,7 +183,7 @@ def fit(models, optims, epochs, dataloaders, criterion, scaler,
 
         with torch.no_grad():
             val_losses, scaled_val_losses, scaled_val_losses_over_time = zip(
-                *[loss_batch(data, models, None, criterion, use_attention=use_attention, scaler=scaler)
+                *[loss_batch(data, models, None, criterion, device, use_attention=use_attention, scaler=scaler)
                   for _, data in enumerate(val_dataloader, 0)]
             )
 
