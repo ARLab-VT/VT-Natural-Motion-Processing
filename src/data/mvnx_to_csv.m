@@ -1,11 +1,11 @@
 function data = mvnx_to_csv(file)
-%MVNX_TO_CSV Summary of this function goes here
-%   Detailed explanation goes here
+%MVNX_TO_CSV File for reading in .mvnx files and converting them to .csv files.
+%   Reading the .mvnx files is expensive, so this converts orientation, position, and
+%   joint angle data to csv format.
 
-filename = [get_folder_path(), '/', 'MVNX Files', '/', file];
+filename = [get_folder_path(), '/MVNX Files/', file];
 
 [data, ~, ~, ~] = load_partial_mvnx(filename, {'orientation', 'position', 'jointAngle'}); 
-
 
 csvData = zeros(size(data,1), 227);
 
