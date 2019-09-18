@@ -20,7 +20,7 @@
 
 - Clone the repo locally
 - Setup the conda environment
-    - `$ conda create --name <myenv> --file environment.txt`
+    - `$ conda create --name <myenv> --file requirements.txt`
 - Feature branches will be used for development
     - `$ git checkout -b <descriptive-name>`
 - Make changes
