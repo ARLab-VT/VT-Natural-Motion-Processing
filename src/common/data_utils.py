@@ -17,8 +17,8 @@ def get_body_info_map():
                     'RightUpperLeg', 'RightLowerLeg', 'RightFoot', 'RightToe',
                     'LeftUpperLeg', 'LeftLowerLeg', 'LeftFoot', 'LeftToe']
     joint_keys = ['jL5S1', 'jL4L3', 'jL1T12', 'jT9T8', 'jT1C7', 'jC1Head',
-                  'jRightC7Shoulder', 'jRightShoulder', 'jRightElbow', 'jRightWrist',
-                  'jLeftC7Shoulder', 'jLeftShoulder', 'jLeftElbow', 'jLeftWrist',
+                  'jRightT4Shoulder', 'jRightShoulder', 'jRightElbow', 'jRightWrist',
+                  'jLeftT4Shoulder', 'jLeftShoulder', 'jLeftElbow', 'jLeftWrist',
                   'jRightHip', 'jRightKnee', 'jRightAnkle', 'jRightBallFoot',
                   'jLeftHip', 'jLeftKnee', 'jLeftAnkle', 'jLeftBallFoot']
 
