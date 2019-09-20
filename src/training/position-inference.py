@@ -23,6 +23,10 @@ import argparse
 import h5py
 
 torch.manual_seed(42)
+np.random.seed(42)
+
+torch.backends.cudnn.deterministic = False
+torch.backends.cudnn.benchmark = False
 
 
 def parse_args():
