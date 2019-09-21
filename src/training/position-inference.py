@@ -60,14 +60,21 @@ if __name__ == "__main__":
     data_file = Path(args.data_file)
     f = h5py.File(args.data_file, 'r')
 
-    X, y = torch.tensor(f['X']), torch.tensor(f['y'])
+    X, y = f['X'], f['y']
     train_indices, val_indices = f['train_indices'], f['val_indices']
 
-    y_size = tuple(y.size())
-    y = y.view(y_size[0] * y_size[1], -1)
+    y_size = y.shape
+    y = np.reshape(y, (y_size[0] * y_size[1], -1))
     scaler = RobustScaler().fit(y)
-    y = torch.tensor(scaler.transform(y))
-    y = y.view(y_size)
+    y = scaler.transform(y)
+    y = np.reshape(y, y_size)
+
+    X_size = X.shape
+    X = np.reshape(X, (X_size[0] * X_size[1], -1))
+    X -= np.mean(X, axis=0)
+    X = np.reshape(X, X_size)
+
+    X, y = torch.tensor(X), torch.tensor(y)
 
     dataset = TensorDataset(X, y)
 
