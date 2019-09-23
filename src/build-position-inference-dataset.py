@@ -8,6 +8,9 @@ import h5py
 from pathlib import Path
 import argparse
 import os
+import random
+import sys
+import math
 
 
 def parse_args():
@@ -19,17 +22,20 @@ def parse_args():
     parser.add_argument('-o', '--output-file-path',
                         help='path to directory to save h5 file')
 
+    parser.add_argument('--max-file-count',
+                        help='max number of files to place into a single h5 file.',
+                        default=5)
+
     parser.add_argument('--seq-length',
                         help='sequence length of prepared data.')
 
-    parser.add_argument('--num-files',
-                        help='number of files to read')
-
     parser.add_argument('--batch-size',
-                        help='batch size for dataset')
+                        help='batch size for dataset',
+                        default=32)
 
     parser.add_argument('--split-size',
-                        help='split size for training and validation dataset')
+                        help='split size for training and validation dataset',
+                        default=0.8)
 
     args = parser.parse_args()
 
@@ -44,35 +50,45 @@ if __name__ == "__main__":
 
     data_path = Path(args.csv_files)
     filenames = os.listdir(data_path)
+    random.shuffle(filenames)
+    num_files = len(filenames)
 
-    orientation_requests = {'Orientation': [
-        'T12', 'RightUpperArm', 'RightForeArm']}
-    position_requests = {'Position': ['Pelvis', 'RightForeArm']}
-    num_files = int(args.num_files)
-    seq_length = int(args.seq_length)
+    num_file_groups = math.ceil(num_files / args.max_file_count)
+    offsets = [args.max_file_count*i for i in range(num_file_groups)]
 
-    orientation = read_data(
-        filenames, data_path, num_files, orientation_requests, seq_length)
+    filename_groups = [[filename for filename in filenames[offset:offset +
+                                                           args.max_file_count]] for offset in offsets]
 
-    position = read_data(
-        filenames, data_path, num_files, position_requests, seq_length, request_type='Position')
+    for i, filenames in enumerate(filename_groups):
+        print("File group:", i+1)
+        orientation_requests = {'Orientation': [
+            'T12', 'RightUpperArm', 'RightForeArm']}
+        position_requests = {'Position': ['Pelvis', 'RightForeArm']}
+        seq_length = int(args.seq_length)
 
-    position = np.flip(position, axis=1).copy()
+        orientation = read_data(
+            filenames, data_path, orientation_requests, seq_length)
 
-    batch_size = int(args.batch_size)
-    orientation = discard_remainder(orientation, batch_size)
-    position = discard_remainder(position, batch_size)
+        position = read_data(
+            filenames, data_path, position_requests, seq_length, request_type='Position')
 
-    orientation = torch.tensor(orientation)
-    position = torch.tensor(position)
+        position = np.flip(position, axis=1).copy()
 
-    split_size = float(args.split_size)
-    dataset, train_indices, val_indices = setup_datasets(
-        orientation, position, batch_size, split_size)
+        batch_size = int(args.batch_size)
+        orientation = discard_remainder(orientation, batch_size)
+        position = discard_remainder(position, batch_size)
 
-    f = h5py.File(args.output_file_path, 'w')
-    f.create_dataset('X', data=orientation)
-    f.create_dataset('y', data=position)
-    f.create_dataset('train_indices', data=train_indices)
-    f.create_dataset('val_indices', data=val_indices)
-    f.close()
+        orientation = torch.tensor(orientation)
+        position = torch.tensor(position)
+
+        split_size = float(args.split_size)
+        dataset, train_indices, val_indices = setup_datasets(
+            orientation, position, batch_size, split_size)
+
+        h5_filename = args.output_file_path + "-" + str(i)
+        f = h5py.File(h5_filename, 'w')
+        f.create_dataset('X', data=orientation)
+        f.create_dataset('y', data=position)
+        f.create_dataset('train_indices', data=train_indices)
+        f.create_dataset('val_indices', data=val_indices)
+        f.close()
