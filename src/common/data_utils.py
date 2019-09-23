@@ -86,10 +86,10 @@ def split_sequences(data, seq_length=120):
     return encoder_input_data, decoder_target_data
 
 
-def read_data(filenames, data_path, n, requests, seq_length, request_type=None):
+def read_data(filenames, data_path, requests, seq_length, request_type=None):
     data = None
 
-    for idx, file in enumerate(filenames[:n]):
+    for idx, file in enumerate(filenames):
         target_columns = request_indices(requests)
         print("Index: " + str(idx + 1), end='\r')
         data_temp = pd.read_csv(data_path / file,
