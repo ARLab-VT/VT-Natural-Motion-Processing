@@ -1,11 +1,13 @@
-import random
-import os
-import argparse
-from pathlib import Path
-import h5py
-from torch import nn, optim, Tensor
+#!/usr/bin/env python
+# coding: utf-8
+
+from common.data_utils import *
 import torch
-from src.common.data_utils import *
+from torch import nn, optim, Tensor
+import h5py
+from pathlib import Path
+import argparse
+import os
 
 
 def parse_args():
