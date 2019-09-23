@@ -1,13 +1,11 @@
-import sys
-sys.path.insert(0, '../..')
-
-from src.common.data_utils import *
-import torch
-from torch import nn, optim, Tensor
-import h5py
-from pathlib import Path
-import argparse
+import random
 import os
+import argparse
+from pathlib import Path
+import h5py
+from torch import nn, optim, Tensor
+import torch
+from src.common.data_utils import *
 
 
 def parse_args():

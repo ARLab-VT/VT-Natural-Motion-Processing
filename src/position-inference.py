@@ -1,12 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import sys
-sys.path.insert(0, '../..')
-
-from src.common.training_utils import *
-from src.common.models import *
-from src.common.data_utils import *
+from common.training_utils import *
+from common.models import *
+from common.data_utils import *
 from pathlib import Path
 import torch
 from torch import nn, optim, Tensor
