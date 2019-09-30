@@ -5,7 +5,12 @@ import time
 import math
 import numpy as np
 import matplotlib.pyplot as plt
-from .models import *
+from torch import optim
+
+
+#importing models
+from .models import EncoderRNN, DecoderRNN, AttnDecoderRNN, Attention
+
 plt.switch_backend('agg')
 torch.manual_seed(0)
 
