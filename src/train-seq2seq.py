@@ -31,6 +31,8 @@ def parse_args():
 
     parser.add_argument('-f', '--data-files-path',
                         help='path to h5 files containing data')
+    parser.add_argument('--model-file-path',
+                        help='path to model file for saving it after training')
     parser.add_argument('--batch-size',
                         help='batch size for training', default=32)
     parser.add_argument('--encoder-feature-size',
@@ -115,3 +117,9 @@ if __name__ == "__main__":
 
         fit(models, optims, epochs, dataloaders, criterion,
             scaler, device, use_attention=args.attention)
+    torch.save({
+            'encoder_state_dict': encoder.state_dict(),
+            'decoder_state_dict': decoder.state_dict(),
+            'optimizerA_state_dict': encoder_optim.state_dict(),
+            'optimizerB_state_dict': decoder_optim.state_dict(),
+            }, args.model_file_path)    

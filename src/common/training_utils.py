@@ -65,7 +65,7 @@ def get_attn_decoder(num_features, method, device, hidden_size=64, lr=0.001, bs=
     return decoder, optim.Adam(decoder.parameters(), lr=lr)
 
 
-def showPlot(points, epochs):
+def savePlot(points, epochs, filename):
     points = np.array(points)
     plt.figure()
     fig, ax = plt.subplots()
@@ -73,6 +73,7 @@ def showPlot(points, epochs):
     plt.plot(x, points[:, 0], 'b-')
     plt.plot(x, points[:, 1], 'r-')
     plt.legend(['training loss', 'val loss'])
+    plt.savefig(filename)
 
 
 def plotLossesOverTime(losses_over_time):
@@ -156,15 +157,14 @@ def fit(models, optims, epochs, dataloaders, criterion, scaler, device,
         teacher_forcing_ratio=0.0,
         update_learning_rates=None,
         use_attention=False,
-        schedule_rate=1.0):
+        schedule_rate=1.0,
+        fig_filename='training_plot.png'):
 
     train_dataloader, val_dataloader = dataloaders
     scaled_val_losses_over_time = None
 
     num_batches = len(train_dataloader)
     batch_size = len(train_dataloader.dataset[0])
-
-    progress_bar = ProgressBar(num_batches, batch_size)
 
     plot_losses = []
     for epoch in range(epochs):
@@ -184,7 +184,8 @@ def fit(models, optims, epochs, dataloaders, criterion, scaler, device,
 
                 losses.append(loss)
             total_time += timer.interval
-            progress_bar.print_progress_bar(index, total_time, loss)
+            if index % 100 == 0:
+                print("Total time elapsed:", total_time, "-", "Batch number:", str(index), "/", str(num_batches), "-", "Training loss:", loss)
 
         with torch.no_grad():
             val_losses, scaled_val_losses, scaled_val_losses_over_time = zip(
@@ -209,5 +210,5 @@ def fit(models, optims, epochs, dataloaders, criterion, scaler, device,
 
         teacher_forcing_ratio *= schedule_rate
 
-    showPlot(plot_losses, epochs)
+    savePlot(plot_losses, epochs, fig_filename)
     plotLossesOverTime(scaled_val_loss_over_time)
