@@ -117,7 +117,6 @@ if __name__ == "__main__":
 
         fit(models, optims, epochs, dataloaders, criterion,
             scaler, device, use_attention=args.attention)
-
     torch.save({
             'encoder_state_dict': encoder.state_dict(),
             'decoder_state_dict': decoder.state_dict(),
