@@ -52,12 +52,13 @@ if __name__ == "__main__":
     filenames = os.listdir(data_path)
     random.shuffle(filenames)
     num_files = len(filenames)
+    max_file_count = int(args.max_file_count)
 
-    num_file_groups = math.ceil(num_files / args.max_file_count)
-    offsets = [args.max_file_count*i for i in range(num_file_groups)]
+    num_file_groups = math.ceil(num_files / max_file_count)
+    offsets = [max_file_count*i for i in range(num_file_groups)]
 
     filename_groups = [[filename for filename in filenames[offset:offset +
-                                                           args.max_file_count]] for offset in offsets]
+                                                           max_file_count]] for offset in offsets]
 
     for i, filenames in enumerate(filename_groups):
         print("File group:", i+1)
