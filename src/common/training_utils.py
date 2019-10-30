@@ -8,9 +8,8 @@ import matplotlib.pyplot as plt
 from torch import optim
 
 
-#importing models
-from .models import EncoderRNN, DecoderRNN, AttnDecoderRNN, Attention
-
+# importing models
+from .models.seq2seq import *
 plt.switch_backend('agg')
 torch.manual_seed(0)
 
@@ -185,7 +184,8 @@ def fit(models, optims, epochs, dataloaders, criterion, scaler, device,
                 losses.append(loss)
             total_time += timer.interval
             if index % 100 == 0:
-                print("Total time elapsed:", total_time, "-", "Batch number:", str(index), "/", str(num_batches), "-", "Training loss:", loss)
+                print("Total time elapsed:", total_time, "-", "Batch number:",
+                      str(index), "/", str(num_batches), "-", "Training loss:", loss)
 
         with torch.no_grad():
             val_losses, scaled_val_losses, scaled_val_losses_over_time = zip(

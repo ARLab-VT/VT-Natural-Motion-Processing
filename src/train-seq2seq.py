@@ -44,7 +44,7 @@ def parse_args():
     parser.add_argument('--bidirectional',
                         help='will use bidirectional encoder', default=False, action='store_true')
     parser.add_argument('--attention',
-                        help='will use decoder with attention', default=False, action='store_true')
+                        help='will use decoder with attention with this method', default='general')
 
     args = parser.parse_args()
 
@@ -63,14 +63,20 @@ if __name__ == "__main__":
     encoder_feature_size = int(args.encoder_feature_size)
     decoder_feature_size = int(args.decoder_feature_size)
 
-    encoder, encoder_optim = get_encoder(
-        encoder_feature_size, device, bidirectional=args.bidirectional)
+    encoder, encoder_optim = get_encoder(encoder_feature_size,
+                                         device,
+                                         bidirectional=args.bidirectional)
 
-    if args.attention:
-        decoder, decoder_optim = get_attn_decoder(
-            decoder_feature_size, 'dot', device, bidirectional_encoder=args.bidirectional)
+    use_attention = False
+    if args.attention in ['add', 'concat', 'general', 'activated-general', 'biased-general']:
+        decoder, decoder_optim = get_attn_decoder(decoder_feature_size,
+                                                  args.attention,
+                                                  device,
+                                                  bidirectional_encoder=args.bidirectional)
+        use_attention = True
     else:
-        decoder, decoder_optim = get_decoder(decoder_feature_size, device)
+        decoder, decoder_optim = get_decoder(decoder_feature_size,
+                                             device)
 
     models = (encoder, decoder)
     optims = (encoder_optim, decoder_optim)
@@ -116,10 +122,10 @@ if __name__ == "__main__":
         print("Number of validation samples:", len(dataloaders[1].dataset))
 
         fit(models, optims, epochs, dataloaders, criterion,
-            scaler, device, use_attention=args.attention)
+            scaler, device, use_attention=use_attention)
     torch.save({
-            'encoder_state_dict': encoder.state_dict(),
-            'decoder_state_dict': decoder.state_dict(),
-            'optimizerA_state_dict': encoder_optim.state_dict(),
-            'optimizerB_state_dict': decoder_optim.state_dict(),
-            }, args.model_file_path)    
+        'encoder_state_dict': encoder.state_dict(),
+        'decoder_state_dict': decoder.state_dict(),
+        'optimizerA_state_dict': encoder_optim.state_dict(),
+        'optimizerB_state_dict': decoder_optim.state_dict(),
+    }, args.model_file_path)
