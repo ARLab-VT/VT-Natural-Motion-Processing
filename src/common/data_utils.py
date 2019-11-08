@@ -1,11 +1,94 @@
 import numpy as np
 import pandas as pd
+import warnings
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import RobustScaler
 from torch.utils.data import TensorDataset, DataLoader, random_split
 
 
+class XSensDataIndices:
+    def __init__(self):
+        sensor_group = ['sensorFreeAcceleration',
+                        'sensorMagneticField',
+                        'sensorOrientation']
+
+        segment_group = ['position', 'velocity', 'acceleration',
+                         'angularVelocity', 'angularAcceleration',
+                         'orientation']
+
+        joint_group = ['jointAngle', 'jointAngleXZY']
+
+        joint_ergo_group = ['jointAngleErgo', 'jointAngleErgoXZY']
+
+        groups = [sensor_group, segment_group,
+                  joint_group, joint_ergo_group]
+        self._labels_to_items(groups)
+
+    def __call__(self, requests):
+        label_indices = {}
+        for label, items in requests.items():
+            if label in self.label_items:
+                label_indices[label] = self._request(label, items)
+        return label_indices
+
+    def _labels_to_items(self, groups):
+        self.label_items = {}
+        sensors = ['Pelvis', 'T8', 'Head', 'RightShoulder', 'RightUpperArm',
+                   'RightForeArm', 'RightHand', 'LeftShoulder', 'LeftUpperArm',
+                   'LeftForeArm', 'LeftHand', 'RightUpperLeg', 'RightLowerLeg',
+                   'RightFoot', 'LeftUpperLeg', 'LeftLowerLeg', 'LeftFoot']
+
+        segments = ['Pelvis', 'L5', 'L3', 'T12', 'T8', 'Neck', 'Head',
+                    'RightShoulder', 'RightUpperArm', 'RightForeArm', 'RightHand',
+                    'LeftShoulder', 'LeftUpperArm', 'LeftForeArm', 'LeftHand',
+                    'RightUpperLeg', 'RightLowerLeg', 'RightFoot', 'RightToe',
+                    'LeftUpperLeg', 'LeftLowerLeg', 'LeftFoot', 'LeftToe']
+
+        joints = ['jL5S1', 'jL4L3', 'jL1T12', 'jT9T8', 'jT1C7', 'jC1Head',
+                  'jRightT4Shoulder', 'jRightShoulder', 'jRightElbow', 'jRightWrist',
+                  'jLeftT4Shoulder', 'jLeftShoulder', 'jLeftElbow', 'jLeftWrist',
+                  'jRightHip', 'jRightKnee', 'jRightAnkle', 'jRightBallFoot',
+                  'jLeftHip', 'jLeftKnee', 'jLeftAnkle', 'jLeftBallFoot']
+
+        ergo_joints = ['T8_Head', 'T8_LeftUpperArm', 'T8_RightUpperArm',
+                       'Pelvis_T8', 'Vertical_Pelvis', 'Vertical_T8']
+
+        item_groups = [sensors, segments, joints, ergo_joints]
+
+        for index, group in enumerate(groups):
+            for label in group:
+                self.label_items[label] = item_groups[index]
+
+    def _request(self, req_label, req_items):
+        valid_items = self.label_items[req_label]
+
+        num_valid_items = len(valid_items)
+        dims = 4 if req_label == 'orientation' else 3
+
+        indices = [list(range(i, i+dims))
+                   for i in range(0, dims*num_valid_items, dims)]
+
+        index_map = dict(zip(valid_items, indices))
+
+        return self._find_indices(index_map, req_items)
+
+    def _find_indices(self, index_map, items):
+        mapped_indices = []
+
+        for item in items:
+            if item in index_map:
+                mapped_indices.append(index_map[item])
+            else:
+                warnings.warn("Requested item {} not in file.".format(item))
+
+        return mapped_indices
+
+
 def get_body_info_map():
+
+    num_segments = 23
+    num_joints = 22
+    num_sensors = 17
 
     orientation_indices = [list(range(i, i + 4)) for i in range(0, 89, 4)]
     position_indices = [list(range(i, i + 3)) for i in range(92, 159, 3)]
@@ -84,6 +167,13 @@ def split_sequences(data, seq_length=120):
         [pad_sequences(sequences[1], seq_length // 2) for sequences in split_data])
 
     return encoder_input_data, decoder_target_data
+
+
+def read_h5(filenames, data_path, requests, seq_length, request_type=None):
+    data = None
+
+    for idx, file in enumerate(filenames):
+        target
 
 
 def read_data(filenames, data_path, requests, seq_length, request_type=None):
