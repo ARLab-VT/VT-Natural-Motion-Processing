@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import warnings
+import h5py
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import RobustScaler
 from torch.utils.data import TensorDataset, DataLoader, random_split
@@ -169,11 +170,36 @@ def split_sequences(data, seq_length=120):
     return encoder_input_data, decoder_target_data
 
 
-def read_h5(filenames, data_path, requests, seq_length, request_type=None):
-    data = None
+def read_h5(filenames, requests, seq_length):
+    xsensIndices = XSensDataIndices()
+    indices = xsensIndices(requests)
 
-    for idx, file in enumerate(filenames):
-        target
+    def flatten(l): return [item for sublist in l for item in sublist]
+
+    h5_files = []
+    for filename in filenames:
+        h5_file = h5py.File(filename, 'r')
+        h5_files.append(h5_file)
+
+    data = {}
+    for label in indices:
+        for h5_file in h5_files:
+            print(h5_file, label)
+            print(flatten(indices[label]))
+            temp_data = np.array(h5_file[label][flatten(indices[label]), :])
+
+            temp_data = temp_data.transpose()
+
+            temp_data = discard_remainder(temp_data, seq_length)
+
+            if label not in data:
+                data[label] = temp_data
+            else:
+                data[label] = np.concatenate((data[label], temp_data), axis=0)
+
+        data[label] = reshape_to_sequences(data[label], seq_length=seq_length)
+
+    return data
 
 
 def read_data(filenames, data_path, requests, seq_length, request_type=None):
