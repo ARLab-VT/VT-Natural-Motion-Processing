@@ -4,6 +4,7 @@ import warnings
 import h5py
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import RobustScaler
+import os
 from torch.utils.data import TensorDataset, DataLoader, random_split
 
 
@@ -15,7 +16,7 @@ class XSensDataIndices:
 
         segment_group = ['position', 'velocity', 'acceleration',
                          'angularVelocity', 'angularAcceleration',
-                         'orientation']
+                         'orientation', 'relativePosition']
 
         joint_group = ['jointAngle', 'jointAngleXZY']
 
@@ -63,6 +64,9 @@ class XSensDataIndices:
     def _request(self, req_label, req_items):
         valid_items = self.label_items[req_label]
 
+        if 'all' in req_items:
+            req_items = valid_items
+
         num_valid_items = len(valid_items)
         dims = 4 if req_label == 'orientation' else 3
 
@@ -83,6 +87,25 @@ class XSensDataIndices:
                 warnings.warn("Requested item {} not in file.".format(item))
 
         return mapped_indices
+
+
+def add_relative_position(filepaths):
+    for filepath in filepaths:
+        h5_file = h5py.File(filepath, 'r+')
+
+        positions = np.array(h5_file['position'][:, :])
+
+        pelvis = positions[:3, :]
+
+        relative_positions = positions - np.tile(pelvis, np.array(positions.shape) //
+                                                 np.array(pelvis.shape))
+
+        try:
+            h5_file.create_dataset('relativePosition', data=relative_positions)
+        except RuntimeError:
+            print("RuntimeError: Unable to create link (name already exists) in {}".format(
+                filepath))
+        h5_file.close()
 
 
 def get_body_info_map():
@@ -170,36 +193,30 @@ def split_sequences(data, seq_length=120):
     return encoder_input_data, decoder_target_data
 
 
-def read_h5(filenames, requests, seq_length):
+def read_h5(filepaths, requests):
     xsensIndices = XSensDataIndices()
     indices = xsensIndices(requests)
 
     def flatten(l): return [item for sublist in l for item in sublist]
 
     h5_files = []
-    for filename in filenames:
-        h5_file = h5py.File(filename, 'r')
-        h5_files.append(h5_file)
+    for filepath in filepaths:
+        h5_file = h5py.File(filepath, 'r')
+        h5_files.append((h5_file, os.path.basename(filepath)))
 
-    data = {}
-    for label in indices:
-        for h5_file in h5_files:
-            print(h5_file, label)
-            print(flatten(indices[label]))
-            temp_data = np.array(h5_file[label][flatten(indices[label]), :])
+    dataset = {}
+    for h5_file, filename in h5_files:
+        dataset[filename] = {}
+        for label in indices:
+            data = np.array(h5_file[label][flatten(indices[label]), :])
 
-            temp_data = temp_data.transpose()
+            data = data.transpose()
 
-            temp_data = discard_remainder(temp_data, seq_length)
+            dataset[filename][label] = data
 
-            if label not in data:
-                data[label] = temp_data
-            else:
-                data[label] = np.concatenate((data[label], temp_data), axis=0)
+        h5_file.close()
 
-        data[label] = reshape_to_sequences(data[label], seq_length=seq_length)
-
-    return data
+    return dataset
 
 
 def read_data(filenames, data_path, requests, seq_length, request_type=None):
