@@ -1,6 +1,5 @@
-python build-position-inference-dataset.py --csv-files "../../CSV Files" \
-                                           --output-file-path "data/cross-validation" \
-                                           --max-file-count 20 \
-                                           --seq-length 20 \
-                                           --batch-size 512 \
-                                           --split-size 0.8
+python build-position-inference-dataset.py --data-path "h5-files" \
+                                           --output-path "data" \
+                                           --training "W1" \
+                                           --validation "W2" \
+                                           --testing "W3"

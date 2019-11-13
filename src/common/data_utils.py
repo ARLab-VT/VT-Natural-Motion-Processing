@@ -5,7 +5,6 @@ import h5py
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import RobustScaler
 import os
-from torch.utils.data import TensorDataset, DataLoader, random_split
 
 
 class XSensDataIndices:
