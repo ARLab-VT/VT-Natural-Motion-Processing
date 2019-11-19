@@ -207,7 +207,9 @@ def read_h5(filepaths, requests):
     for h5_file, filename in h5_files:
         dataset[filename] = {}
         for label in indices:
-            data = np.array(h5_file[label][flatten(indices[label]), :])
+            label_indices = flatten(indices[label])
+            label_indices.sort()
+            data = np.array(h5_file[label][label_indices, :])
 
             data = data.transpose()
 

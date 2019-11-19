@@ -1,9 +1,8 @@
 
-python train-seq2seq.py -f /home/jack/work/research/ARL/xsens/position-inference/ \
+python train-seq2seq.py --data-path ./elbow-prediction \
                         --model-file-path ./models/trained-model.pt \
                         --batch-size=32 \
-                        --encoder-feature-size=12 \
-                        --decoder-feature-size=3 \
                         --num-epochs=20 \
+                        --hidden-size=364 \
                         --bidirectional \
                         --attention=biased-general
