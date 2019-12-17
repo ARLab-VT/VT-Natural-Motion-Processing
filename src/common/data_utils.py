@@ -15,7 +15,7 @@ class XSensDataIndices:
 
         segment_group = ['position', 'velocity', 'acceleration',
                          'angularVelocity', 'angularAcceleration',
-                         'orientation', 'relativePosition']
+                         'orientation', 'smoothedOrientation', 'relativePosition']
 
         joint_group = ['jointAngle', 'jointAngleXZY']
 
@@ -67,7 +67,7 @@ class XSensDataIndices:
             req_items = valid_items
 
         num_valid_items = len(valid_items)
-        dims = 4 if req_label == 'orientation' else 3
+        dims = 4 if req_label in ['orientation', 'smoothedOrientation'] else 3
 
         indices = [list(range(i, i+dims))
                    for i in range(0, dims*num_valid_items, dims)]
@@ -93,19 +93,65 @@ def add_relative_position(filepaths):
         h5_file = h5py.File(filepath, 'r+')
 
         positions = np.array(h5_file['position'][:, :])
-
-        pelvis = positions[:3, :]
+        positions = positions.reshape(positions.shape[1], positions.shape[0])
+        pelvis = positions[:, :3]
 
         relative_positions = positions - np.tile(pelvis, np.array(positions.shape) //
                                                  np.array(pelvis.shape))
+        
+        relative_positions = relative_positions.reshape(relative_positions.shape[1], relative_positions.shape[0])
 
         try:
             h5_file.create_dataset('relativePosition', data=relative_positions)
         except RuntimeError:
             print("RuntimeError: Unable to create link (name already exists) in {}".format(
-                filepath))
+                  filepath))
         h5_file.close()
 
+def add_smooth_orientations(filepaths):
+    for filepath in filepaths:
+        try:
+            h5_file = h5py.File(filepath, 'r+')
+        except OSError:
+            print("OSError: Unable to open file {}".format(filepath))
+            continue
+ 
+        orient = np.array(h5_file['orientation'][:, :])
+        orient = orient.reshape(orient.shape[1], orient.shape[0])
+        orient = orient.reshape(orient.shape[0], -1, 4)
+
+        smooth_orient = qfix(orient)
+
+        smooth_orient = smooth_orient.reshape(smooth_orient.shape[0], -1)
+        smooth_orient = smooth_orient.reshape(smooth_orient.shape[1], smooth_orient.shape[0])
+        
+        try:
+            h5_file.create_dataset('smoothedOrientation', data=smooth_orient)
+        except RuntimeError:
+            print("RuntimeError: Unable to create link (name already exists) in {}".format(
+                  filepath))
+        h5_file.close()
+
+def qfix(q):
+    """
+    Attribution: https://github.com/facebookresearch/QuaterNet/blob/9d8485b732b0a44b99b6cf4b12d3915703507ddc/common/quaternion.py#L119    
+
+    Enforce quaternion continuity across the time dimension by selecting
+    the representation (q or -q) with minimal distance (or, equivalently, maximal dot product)
+    between two consecutive frames.
+    
+    Expects a tensor of shape (L, J, 4), where L is the sequence length and J is the number of joints.
+    Returns a tensor of the same shape.
+    """
+    assert len(q.shape) == 3
+    assert q.shape[-1] == 4
+    
+    result = q.copy()
+    dot_products = np.sum(q[1:]*q[:-1], axis=2)
+    mask = dot_products < 0
+    mask = (np.cumsum(mask, axis=0)%2).astype(bool)
+    result[1:][mask] *= -1
+    return result
 
 def get_body_info_map():
 
@@ -156,9 +202,9 @@ def discard_remainder(data, seq_length):
     return data
 
 
-def reshape_to_sequences(data, seq_length=120):
+def reshape_to_sequences(data, seq_length):
     data = discard_remainder(data, seq_length)
-    data = data.reshape(data.shape[0] // seq_length, seq_length, data.shape[1])
+    data = data.reshape(-1, seq_length, data.shape[1])
     return data
 
 
@@ -177,20 +223,24 @@ def pad_sequences(sequences, maxlen, start_char=False, padding='post'):
     return padded_sequences
 
 
-def split_sequences(data, seq_length=120):
-    split_indices = seq_length // 2
+def split_sequences(data, seq_length):
+    data = data.reshape(-1, seq_length, data.shape[1])
+    X = data[::2]
+    X = X.reshape(-1, data.shape[2])    
 
-    split_data = [(data[i, :split_indices, :], data[i, split_indices:, :])
-                  for i in range(data.shape[0])]
+    y = data[1::2]
+    y = y.reshape(-1, data.shape[2])
 
-    encoder_input_data = np.array([pad_sequences(
-        sequences[0], seq_length // 2, padding='pre') for sequences in split_data])
+    return X, y
 
-    decoder_target_data = np.array(
-        [pad_sequences(sequences[1], seq_length // 2) for sequences in split_data])
-
-    return encoder_input_data, decoder_target_data
-
+def split_sequences_stride(data, seq_length, stride):
+    X, y = [], []
+    for i in range(0, data.shape[0] - 2*seq_length, stride):
+        X.append(data[i:i+seq_length, :])
+        y.append(data[i+seq_length:i+2*seq_length, :])
+    X = np.concatenate(X, axis=0)
+    y = np.concatenate(y, axis=0)
+    return X, y
 
 def read_h5(filepaths, requests):
     xsensIndices = XSensDataIndices()
@@ -211,63 +261,10 @@ def read_h5(filepaths, requests):
             label_indices.sort()
             data = np.array(h5_file[label][label_indices, :])
 
-            data = data.transpose()
+            data = data.reshape(data.shape[1], data.shape[0])
 
             dataset[filename][label] = data
 
         h5_file.close()
 
     return dataset
-
-
-def read_data(filenames, data_path, requests, seq_length, request_type=None):
-    data = None
-
-    for idx, file in enumerate(filenames):
-        target_columns = request_indices(requests)
-        print("Index: " + str(idx + 1), end='\r')
-        data_temp = pd.read_csv(data_path / file,
-                                delimiter=',',
-                                usecols=target_columns,
-                                header=0).values
-
-        data_temp = discard_remainder(data_temp, seq_length)
-
-        if request_type == 'Position':
-            data_temp[:, 3:] -= data_temp[:, :3]
-            data_temp = data_temp[:, 3:]
-
-        if idx == 0:
-            data = data_temp
-        else:
-            data = np.concatenate((data, data_temp), axis=0)
-
-    print("Done with reading files")
-    print("Number of frames in dataset:", data.shape[0])
-    print("Number of bytes:", data.nbytes)
-
-    data = reshape_to_sequences(data, seq_length=seq_length)
-    return data
-
-
-def setup_datasets(encoder_input_data, decoder_target_data, batch_size, split_size):
-    dataset = TensorDataset(encoder_input_data, decoder_target_data)
-
-    train_size_approx = int(split_size * len(dataset))
-    train_size = train_size_approx - (train_size_approx % batch_size)
-    val_size = len(dataset) - train_size
-
-    train_subset, val_subset = random_split(dataset, [train_size, val_size])
-
-    return dataset, train_subset.indices, val_subset.indices
-
-
-def setup_dataloaders(datasets, batch_size):
-    train_dataloader = DataLoader(
-        datasets[0], batch_size=batch_size, shuffle=True)
-    val_dataloader = DataLoader(
-        datasets[1], batch_size=batch_size, shuffle=False)
-
-    dataloaders = (train_dataloader, val_dataloader)
-
-    return dataloaders

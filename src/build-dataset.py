@@ -65,7 +65,7 @@ def parse_args():
 def setup_filepaths(data_path, participant_numbers):
     all_filepaths = []
     for participant_number in participant_numbers:
-        filepaths = glob.glob(data_path + "/" + participant_number + "*.h5")
+        filepaths = glob.glob(data_path + "/" + participant_number + "_*.h5")
         all_filepaths += filepaths
     return all_filepaths
 
@@ -89,11 +89,12 @@ if __name__ == "__main__":
         print("File group:", group)
         h5_filename = args.output_path + "/" + group + ".h5"
         h5_file = h5py.File(h5_filename, 'w')
-
         dataset = read_h5(filepaths, requests)
-        
         for filename in dataset.keys():
             for data_group in experiment_setup.keys():
-                h5_file.create_dataset(filename + '/' + experiment_setup[data_group], 
-                                       data=dataset[filename][data_group])
+                try:
+                    h5_file.create_dataset(filename + '/' + experiment_setup[data_group], 
+                                           data=dataset[filename][data_group])
+                except KeyError:
+                    print("Dataset retrieved from {} does not contain {}".format(name, data_group))
         h5_file.close()
