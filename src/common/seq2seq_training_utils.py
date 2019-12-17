@@ -6,7 +6,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 from torch import optim
-
+from .logging import logger
 
 # importing models
 from .models.seq2seq import *
@@ -173,7 +173,7 @@ def fit(models, optims, epochs, dataloaders, criterion, scaler, device,
         if update_learning_rates is not None:
             optims = update_learning_rates(optims, epoch)
 
-        print("Epoch", str(epoch + 1) + "/" + str(epochs))
+        logger.info("Epoch {} / {}".format(str(epoch+1), str(epochs)))
 
         for index, data in enumerate(train_dataloader, 0):
             with Timer() as timer:
@@ -183,9 +183,11 @@ def fit(models, optims, epochs, dataloaders, criterion, scaler, device,
 
                 losses.append(loss)
             total_time += timer.interval
-            if index % 100 == 0:
-                print("Total time elapsed:", total_time, "-", "Batch number:",
-                      str(index), "/", str(num_batches), "-", "Training loss:", loss)
+            if index % (len(train_dataloader) // 10) == 0:
+                logger.info("Total time elapsed: {} - Batch Number: {} / {} - Training loss: {}".format(str(total_time), 
+                                                                                                       str(index), 
+                                                                                                       str(num_batches), 
+                                                                                                       str(loss)))
 
         with torch.no_grad():
             val_losses, scaled_val_losses, scaled_val_losses_over_time = zip(
@@ -205,8 +207,7 @@ def fit(models, optims, epochs, dataloaders, criterion, scaler, device,
         plot_losses.append((loss, val_loss))
 
         print()
-        print("Training Loss: %.8f - Val Loss: %.8f - Scaled Val Loss: %.8f" %
-              (loss, val_loss, scaled_val_loss))
+        logger.info("Training Loss: {} - Val Loss: {} - Scaled Val Loss: {}".format(str(loss), str(val_loss), str(scaled_val_loss)))
 
         teacher_forcing_ratio *= schedule_rate
 
