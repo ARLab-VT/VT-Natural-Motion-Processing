@@ -7,20 +7,16 @@
 - [Conda Environment](#conda-environment)
 
 ## Project Layout
-
-    models/                                             
-    notebooks/                                        
-    src/                                                     
-        data/                                               
+                                       
+    src/                                                                                                  
         common/                                       
-        tests/
-        visualization/
+        matlab/
 
 ## Workflow
 
 - Clone the repo locally
 - Setup the conda environment
-    - `$ conda create --name <myenv> --file requirements.txt`
+    - `$ conda env create -f environment.yml`
 - Feature branches will be used for development
     - `$ git checkout -b <descriptive-name>`
 - Make changes
