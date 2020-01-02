@@ -2,6 +2,7 @@
 # coding: utf-8
 
 from common.data_utils import *
+from common.logging import logger
 import h5py
 from pathlib import Path
 import argparse
@@ -46,19 +47,32 @@ def parse_args():
     args = parser.parse_args()
 
     if args.training is None or args.validation is None or args.testing is None:
-        print("Participant numbers for training, validation, or testing dataset were not provided.")
+        logger.info("Participant numbers for training, validation, or testing dataset were not provided.")
         parser.print_help()
         sys.exit()
 
     if args.data_path is None or args.output_path is None:
-        print("Data path or output path were not provided.")
+        logger.info("Data path or output path were not provided.")
         parser.print_help()
         sys.exit()
 
-    if args.task_input is None or args.task_output is None or args.input_label_request is None or args.output_label_request is None:
-        print("Task input or output were not provided along with label requests")
+    if args.task_input is None or args.input_label_request is None or args.task_output is None:
+        logger.info("Task input and label requests or task output were not given.")
         parser.print_help()
-        sys.exit()    
+        sys.exit()
+
+    if args.task_input == args.task_output:
+        if args.output_label_request is None:
+            logger.info("Will create dataset with only X dataset for self-supervision tasks...")
+        else:
+            logger.error("Need output label requests to be None if task input is equal to task output.")
+            parser.print_help()
+            sys.exit()
+    else:
+        if args.output_label_request is None:
+            logger.info("Label output requests were not given for the task.")
+            parser.print_help()
+            sys.exit()
 
     return args
 
@@ -81,9 +95,13 @@ if __name__ == "__main__":
     task_input = args.task_input
     task_output = args.task_output
 
-    experiment_setup = {task_input : 'X', task_output : 'Y'}
-    requests = {task_input : args.input_label_request.split(" "), 
-                task_output : args.output_label_request.split(" ")}
+    if task_input == task_output:
+        experiment_setup = {task_input : "X"}
+        requests = {task_input : args.input_label_request.split(" ")}
+    else:
+        experiment_setup = {task_input : "X", task_output : "Y"}
+        requests = {task_input : args.input_label_request.split(" "),
+                    task_output : args.input_label_request.split(" ")}
 
     for filepaths, group in filepath_groups:
         print("File group:", group)
@@ -91,10 +109,10 @@ if __name__ == "__main__":
         h5_file = h5py.File(h5_filename, 'w')
         dataset = read_h5(filepaths, requests)
         for filename in dataset.keys():
-            for data_group in experiment_setup.keys():
+            for i, data_group in enumerate(experiment_setup):
                 try:
                     h5_file.create_dataset(filename + '/' + experiment_setup[data_group], 
                                            data=dataset[filename][data_group])
                 except KeyError:
-                    print("Dataset retrieved from {} does not contain {}".format(name, data_group))
+                    print("Dataset retrieved from {} does not contain {}".format(filename, data_group))
         h5_file.close()
