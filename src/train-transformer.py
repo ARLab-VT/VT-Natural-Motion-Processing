@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from common.transformer_training_utils import *
-from common.models.transformers import *
+from transformers.training_utils import *
+from transformers.transformers import *
 from common.data_utils import *
 from common.logging import logger
 from pathlib import Path

@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from common.training_utils import *
-from common.models import *
+from seq2seq.training_utils import *
+from seq2seq.seq2seq import *
 from common.data_utils import *
 from pathlib import Path
 import torch
