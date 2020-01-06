@@ -9,7 +9,9 @@
 ## Project Layout
                                        
     src/                                                                                                  
-        common/                                       
+        common/
+        seq2seq/
+        transformers                                       
         matlab/
 
 ## Workflow
