@@ -222,18 +222,7 @@ def pad_sequences(sequences, maxlen, start_char=False, padding='post'):
         padded_sequences[offset:, :] = sequences
     return padded_sequences
 
-
-def split_sequences(data, seq_length):
-    data = data.reshape(-1, seq_length, data.shape[1])
-    X = data[::2]
-    X = X.reshape(-1, data.shape[2])    
-
-    y = data[1::2]
-    y = y.reshape(-1, data.shape[2])
-
-    return X, y
-
-def split_sequences_stride(data, seq_length, stride):
+def split_sequences(data, seq_length, stride):
     X, y = [], []
     for i in range(0, data.shape[0] - 2*seq_length, stride):
         X.append(data[i:i+seq_length, :])

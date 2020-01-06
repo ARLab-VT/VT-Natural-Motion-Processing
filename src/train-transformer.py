@@ -13,6 +13,7 @@ from torch.utils.data import TensorDataset, DataLoader, random_split, Subset, Ra
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import RobustScaler, MinMaxScaler
+import sys
 import math
 import random
 import os
@@ -30,6 +31,8 @@ torch.backends.cudnn.benchmark = False
 def parse_args():
     parser = argparse.ArgumentParser()
 
+    parser.add_argument('--task',
+                        help='task for neural network to train on; either prediction or conversion')
     parser.add_argument('--data-path',
                         help='path to h5 files containing data (must contain training.h5 and validation.h5)')
     parser.add_argument('--model-file-path',
@@ -40,6 +43,8 @@ def parse_args():
 			help='learning rate for encoder and decoder', default=0.001)
     parser.add_argument('--seq-length',
                         help='sequence length for encoder/decoder', default=20)
+    parser.add_argument('--stride',
+                        help='stride used when running prediction tasks', default=3)
     parser.add_argument('--num-epochs',
                         help='number of epochs for training', default=1)
     parser.add_argument('--num-heads',
@@ -56,18 +61,24 @@ def parse_args():
     if args.data_path is None:
         parser.print_help()
 
-    return args
+    return args   
 
-def read_X_and_y(h5_file_path, seq_length):
+def read_h5_file(h5_file_path, task, seq_length, stride):
     X, y = None, None
     h5_file = h5py.File(h5_file_path, 'r')
     for filename in h5_file.keys():
         X_temp = h5_file[filename]['X']
-        y_temp = h5_file[filename]['Y']
-
         X_temp = discard_remainder(X_temp, 2*seq_length)
-        y_temp = discard_remainder(y_temp, 2*seq_length)
 
+        if task == 'prediction':
+            X_temp, y_temp = split_sequences(X_temp, seq_length, stride)
+        elif task == 'conversion':
+            y_temp = h5_file[filename]['Y']
+            y_temp = discard_remainder(y_temp, 2*seq_length)
+        else:
+            logger.error("Task must be either prediction or conversion, found {}".format(task))
+            sys.exit()
+        
         if X is None and y is None:
             X = X_temp
             y = y_temp
@@ -75,7 +86,7 @@ def read_X_and_y(h5_file_path, seq_length):
             X = np.append(X, X_temp, axis=0)
             y = np.append(y, y_temp, axis=0)
     h5_file.close()
-    return X, y   
+    return X, y
 
 if __name__ == "__main__":
     args = parse_args()
@@ -88,11 +99,12 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     seq_length = int(args.seq_length)
+    stride = int(args.stride)
     lr = float(args.learning_rate)
  
     train_file_path = args.data_path + '/training.h5'
-    X, _ = read_X_and_y(train_file_path, seq_length)
-    X, y = split_sequences(X, seq_length)
+    
+    X, y = read_h5_file(train_file_path, args.task, seq_length, stride)
 
     logger.info("{}, {}".format(X.shape, y.shape))
 
@@ -100,8 +112,8 @@ if __name__ == "__main__":
     decoder_feature_size = y.shape[1]
 
     val_file_path = args.data_path + '/validation.h5'    
-    X_val, _ = read_X_and_y(val_file_path, seq_length)
-    X_val, y_val = split_sequences(X_val, seq_length)
+    
+    X_val, y_val = read_h5_file(val_file_path, args.task, seq_length, stride)   
 
     scaler = None
     y = reshape_to_sequences(y, seq_length)
