@@ -134,7 +134,8 @@ def add_smooth_orientations(filepaths):
 
 def qfix(q):
     """
-    Attribution: https://github.com/facebookresearch/QuaterNet/blob/9d8485b732b0a44b99b6cf4b12d3915703507ddc/common/quaternion.py#L119    
+    Borrowed from QuaterNet: 
+    https://github.com/facebookresearch/QuaterNet/blob/9d8485b732b0a44b99b6cf4b12d3915703507ddc/common/quaternion.py#L119    
 
     Enforce quaternion continuity across the time dimension by selecting
     the representation (q or -q) with minimal distance (or, equivalently, maximal dot product)
@@ -152,48 +153,6 @@ def qfix(q):
     mask = (np.cumsum(mask, axis=0)%2).astype(bool)
     result[1:][mask] *= -1
     return result
-
-def get_body_info_map():
-
-    num_segments = 23
-    num_joints = 22
-    num_sensors = 17
-
-    orientation_indices = [list(range(i, i + 4)) for i in range(0, 89, 4)]
-    position_indices = [list(range(i, i + 3)) for i in range(92, 159, 3)]
-    joint_angle_indices = [list(range(i, i + 3)) for i in range(161, 225, 3)]
-
-    segment_keys = ['Pelvis', 'L5', 'L3', 'T12', 'T8', 'Neck', 'Head',
-                    'RightShoulder', 'RightUpperArm', 'RightForeArm', 'RightHand',
-                    'LeftShoulder', 'LeftUpperArm', 'LeftForeArm', 'LeftHand',
-                    'RightUpperLeg', 'RightLowerLeg', 'RightFoot', 'RightToe',
-                    'LeftUpperLeg', 'LeftLowerLeg', 'LeftFoot', 'LeftToe']
-    joint_keys = ['jL5S1', 'jL4L3', 'jL1T12', 'jT9T8', 'jT1C7', 'jC1Head',
-                  'jRightT4Shoulder', 'jRightShoulder', 'jRightElbow', 'jRightWrist',
-                  'jLeftT4Shoulder', 'jLeftShoulder', 'jLeftElbow', 'jLeftWrist',
-                  'jRightHip', 'jRightKnee', 'jRightAnkle', 'jRightBallFoot',
-                  'jLeftHip', 'jLeftKnee', 'jLeftAnkle', 'jLeftBallFoot']
-
-    orientation_map = dict(zip(segment_keys, orientation_indices))
-    position_map = dict(zip(segment_keys, position_indices))
-    joint_angle_map = dict(zip(joint_keys, joint_angle_indices))
-    body_info_map = dict(zip(['Orientation', 'Position', 'Joint'],
-                             [orientation_map, position_map, joint_angle_map]))
-
-    return body_info_map
-
-
-def request_indices(request_dict):
-    indices = []
-    body_info_map = get_body_info_map()
-    for key in list(request_dict.keys()):
-        if key in body_info_map:
-            relevant_map = body_info_map[key]
-            for request in request_dict[key]:
-                indices += relevant_map[request]
-
-    indices.sort()
-    return indices
 
 
 def discard_remainder(data, seq_length):
