@@ -91,7 +91,7 @@ def write_dataset(filepath_groups, variable, experiment_setup, requests):
     for filepaths, group in filepath_groups:
         logger.info("Writing {} to the {} file group...".format(variable, group))
         h5_filename = args.output_path + "/" + group + ".h5"
-        h5_file = h5py.File(h5_filename, 'w')
+        h5_file = h5py.File(h5_filename, 'a')
         dataset = read_h5(filepaths, requests)
         for filename in dataset.keys():
                 temp_dataset = None
