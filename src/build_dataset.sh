@@ -1,8 +1,9 @@
 python build-dataset.py --data-path "h5-files" \
-                        --output-path "orientation-dataset" \
-                        --training "W1 W2 W3 P1 P2 P3 P4 P5 P6 P7" \
-                        --validation "P8 P9 P10 P12" \
+                        --output-path "sensor-test-dataset" \
+                        --training "W1" \
+                        --validation "P8" \
                         --testing "P5" \
-                        --task-input "smoothedOrientation" \
+                        --task-input "sensorFreeAcceleration sensorMagneticField sensorOrientation" \
                         --input-label-request "all" \
-                        --task-output "smoothedOrientation"
+                        --task-output "jointAngle" \
+                        --output-label-request "all"
