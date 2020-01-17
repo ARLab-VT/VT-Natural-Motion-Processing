@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader, random_split, Subset, RandomSampler
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import RobustScaler, MinMaxScaler
+from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
 import sys
 import math
 import random
@@ -63,30 +63,6 @@ def parse_args():
 
     return args   
 
-def read_h5_file(h5_file_path, task, seq_length, stride):
-    X, y = None, None
-    h5_file = h5py.File(h5_file_path, 'r')
-    for filename in h5_file.keys():
-        X_temp = h5_file[filename]['X']
-        X_temp = discard_remainder(X_temp, 2*seq_length)
-
-        if task == 'prediction':
-            X_temp, y_temp = split_sequences(X_temp, seq_length, stride)
-        elif task == 'conversion':
-            y_temp = h5_file[filename]['Y']
-            y_temp = discard_remainder(y_temp, 2*seq_length)
-        else:
-            logger.error("Task must be either prediction or conversion, found {}".format(task))
-            sys.exit()
-        
-        if X is None and y is None:
-            X = X_temp
-            y = y_temp
-        else:
-            X = np.append(X, X_temp, axis=0)
-            y = np.append(y, y_temp, axis=0)
-    h5_file.close()
-    return X, y
 
 if __name__ == "__main__":
     args = parse_args()
@@ -104,7 +80,7 @@ if __name__ == "__main__":
  
     train_file_path = args.data_path + '/training.h5'
     
-    X, y = read_h5_file(train_file_path, args.task, seq_length, stride)
+    X, y = read_variables(train_file_path, args.task, seq_length, stride)
 
     logger.info("{}, {}".format(X.shape, y.shape))
 
@@ -113,14 +89,17 @@ if __name__ == "__main__":
 
     val_file_path = args.data_path + '/validation.h5'    
     
-    X_val, y_val = read_h5_file(val_file_path, args.task, seq_length, stride)   
+    X_val, y_val = read_variables(val_file_path, args.task, seq_length, stride)   
 
     scaler = None
+    y_scaler = StandardScaler().fit(np.append(y, y_val, axis=0))
+    y = y_scaler.transform(y)
     y = reshape_to_sequences(y, seq_length)
-
+ 
+    y_val = y_scaler.transform(y_val)
     y_val = reshape_to_sequences(y_val, seq_length)
     
-    X_scaler = RobustScaler().fit(np.append(X, X_val, axis=0))
+    X_scaler = StandardScaler().fit(np.append(X, X_val, axis=0))
     X = X_scaler.transform(X)
     X -= np.mean(X, axis=0)
     X = reshape_to_sequences(X, seq_length)

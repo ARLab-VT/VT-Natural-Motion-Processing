@@ -181,6 +181,7 @@ def pad_sequences(sequences, maxlen, start_char=False, padding='post'):
         padded_sequences[offset:, :] = sequences
     return padded_sequences
 
+
 def split_sequences(data, seq_length, stride):
     X, y = [], []
     for i in range(0, data.shape[0] - 2*seq_length, stride):
@@ -189,6 +190,7 @@ def split_sequences(data, seq_length, stride):
     X = np.concatenate(X, axis=0)
     y = np.concatenate(y, axis=0)
     return X, y
+
 
 def read_h5(filepaths, requests):
     xsensIndices = XSensDataIndices()
@@ -216,3 +218,29 @@ def read_h5(filepaths, requests):
         h5_file.close()
 
     return dataset
+
+
+def read_variables(h5_file_path, task, seq_length, stride):
+    X, y = None, None
+    h5_file = h5py.File(h5_file_path, 'r')
+    for filename in h5_file.keys():
+        X_temp = h5_file[filename]['X']
+        X_temp = discard_remainder(X_temp, 2*seq_length)
+
+        if task == 'prediction':
+            X_temp, y_temp = split_sequences(X_temp, seq_length, stride)
+        elif task == 'conversion':
+            y_temp = h5_file[filename]['Y']
+            y_temp = discard_remainder(y_temp, 2*seq_length)
+        else:
+            logger.error("Task must be either prediction or conversion, found {}".format(task))
+            sys.exit()
+        
+        if X is None and y is None:
+            X = X_temp
+            y = y_temp
+        else:
+            X = np.append(X, X_temp, axis=0)
+            y = np.append(y, y_temp, axis=0)
+    h5_file.close()
+    return X, y
