@@ -5,7 +5,7 @@ import h5py
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import RobustScaler
 import os
-
+from .conversions import *
 
 class XSensDataIndices:
     def __init__(self):
@@ -17,7 +17,7 @@ class XSensDataIndices:
                          'angularVelocity', 'angularAcceleration',
                          'orientation', 'smoothedOrientation', 'relativePosition']
 
-        joint_group = ['jointAngle', 'jointAngleXZY']
+        joint_group = ['jointAngle', 'jointAngleExpmap', 'jointAngleXZY']
 
         joint_ergo_group = ['jointAngleErgo', 'jointAngleErgoXZY']
 
@@ -101,14 +101,16 @@ def add_relative_position(filepaths):
         
         relative_positions = relative_positions.reshape(relative_positions.shape[1], relative_positions.shape[0])
 
-        try:
+        try: 
+            print("Writing to file {}".format(filepath))
             h5_file.create_dataset('relativePosition', data=relative_positions)
         except RuntimeError:
             print("RuntimeError: Unable to create link (name already exists) in {}".format(
                   filepath))
         h5_file.close()
 
-def add_smooth_orientations(filepaths):
+
+def add_joint_angle_expmap(filepaths):
     for filepath in filepaths:
         try:
             h5_file = h5py.File(filepath, 'r+')
@@ -116,21 +118,46 @@ def add_smooth_orientations(filepaths):
             print("OSError: Unable to open file {}".format(filepath))
             continue
  
-        orient = np.array(h5_file['orientation'][:, :])
-        orient = orient.reshape(orient.shape[1], orient.shape[0])
-        orient = orient.reshape(orient.shape[0], -1, 4)
-
-        smooth_orient = qfix(orient)
-
-        smooth_orient = smooth_orient.reshape(smooth_orient.shape[0], -1)
-        smooth_orient = smooth_orient.reshape(smooth_orient.shape[1], smooth_orient.shape[0])
+        joint_angles = np.array(h5_file['jointAngle'])
+        joint_angles = joint_angles.reshape(joint_angles.shape[1], joint_angles.shape[0])
         
+        quat = euler_to_quaternion(joint_angles, 'zxy')
+        expmap = quaternion_to_expmap(quat)
+        expmap = expmap.reshape(expmap.shape[1], expmap.shape[0])
+
         try:
-            h5_file.create_dataset('smoothedOrientation', data=smooth_orient)
+            print("Writing to file {}".format(filepath))
+            h5_file.create_dataset('jointAngleExpmap', data=expmap)
         except RuntimeError:
             print("RuntimeError: Unable to create link (name already exists) in {}".format(
                   filepath))
         h5_file.close()
+
+def add_continuous_quaternions(filepaths, group_name, new_group_name):
+    for filepath in filepaths:
+        try:
+            h5_file = h5py.File(filepath, 'r+')
+        except OSError:
+            print("OSError: Unable to open file {}".format(filepath))
+            continue
+ 
+        quat = np.array(h5_file[group_name][:, :])
+        quat = quat.reshape(quat.shape[1], quat.shape[0])
+        quat = quat.reshape(quat.shape[0], -1, 4)
+
+        cont_quat = qfix(quat)
+
+        cont_quat = cont_quat.reshape(cont_orient.shape[0], -1)
+        cont_orient = cont_quat.reshape(cont_orient.shape[1], cont_orient.shape[0])
+        
+        try:            
+            print("Writing to file {}".format(filepath))
+            h5_file.create_dataset(new_group_name, data=cont_orient)
+        except RuntimeError:
+            print("RuntimeError: Unable to create link (name already exists) in {}".format(
+                  filepath))
+        h5_file.close()
+
 
 def qfix(q):
     """
