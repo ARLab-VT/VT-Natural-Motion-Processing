@@ -61,18 +61,19 @@ def parse_args():
         parser.print_help()
         sys.exit()
 
+    if args.output_label_request is None:
+        if args.task_input == args.task_output:
+            logger.info("Will create h5 files with input data only.")
+        else:
+            logger.error("Label output requests were not given for the task.")
+            parser.print_help()
+            sys.exit()
+    
     if args.task_input == args.task_output:
         if args.output_label_request is None:
             logger.info("Will create h5 files with only input data for self-supervision tasks...")
         else:
-            logger.error("Need output label requests to be None if task input is equal to task output.")
-            parser.print_help()
-            sys.exit()
-    else:
-        if args.output_label_request is None:
-            logger.info("Label output requests were not given for the task.")
-            parser.print_help()
-            sys.exit()
+            logger.error("Will create h5 files with input and output data.")
 
     return args
 
@@ -122,7 +123,7 @@ if __name__ == "__main__":
     task_output = args.task_output.split(" ")
     output_label_request = args.output_label_request.split(" ")
 
-    if args.task_input == args.task_output:
+    if args.task_input == args.task_output and args.output_label_request is None:
         experiment_setup = {"X" : task_input}
         requests = map_requests(task_input, input_label_request)
 
