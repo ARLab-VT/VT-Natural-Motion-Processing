@@ -236,9 +236,11 @@ def read_h5(filepaths, requests):
         for label in indices:
             label_indices = flatten(indices[label])
             label_indices.sort()
-            data = np.array(h5_file[label][label_indices, :])
-
-            data = data.reshape(data.shape[1], data.shape[0])
+            
+            file_data = np.array(h5_file[label])
+            file_data = file_data.reshape(file_data.shape[1], file_data.shape[0])
+            
+            data = np.array(file_data[:, label_indices])
 
             dataset[filename][label] = data
 
