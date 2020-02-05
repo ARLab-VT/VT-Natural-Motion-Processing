@@ -127,3 +127,5 @@ dmypy.json
 # data
 *.csv
 *.mvnx
+*.h5
+*.pt
