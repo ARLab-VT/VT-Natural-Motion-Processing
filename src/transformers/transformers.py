@@ -27,13 +27,11 @@ class MotionTransformer(nn.Module):
         self.pos_encoder = PositionalEncoding(num_input_features, dropout)
         self.encoder_layer = nn.TransformerEncoderLayer(num_input_features, 
                                                         num_heads,
-                                                        dim_feedforward,
-                                                        dropout, 
-                                                        'relu')
+                                                        dim_feedforward=dim_feedforward,
+                                                        dropout=dropout)
         self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers, norm=None)
         self.decoder = nn.Linear(num_input_features, num_output_features)
         self.src_mask = None
-	
     
     def _generate_square_subsequent_mask(self, sz):
         mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
@@ -50,9 +48,18 @@ class MotionTransformer(nn.Module):
             device = src.device
             mask = self._generate_square_subsequent_mask(len(src)).to(device)
             self.src_mask = mask
-        src = self.pos_encoder(src)
-        output = self.encoder(src, self.src_mask)
-        return self.decoder(output)
+        pos_enc = self.pos_encoder(src)
+        enc_output = self.encoder(pos_enc, self.src_mask)
+        velocities = self.decoder(enc_output)
+        
+        last_pose = src[-1, :, :]
+        output = torch.zeros_like(velocities).to(src.device)
+        
+        for i in range(velocities.shape[0]):
+            output[i, :, :] = last_pose + velocities[i, :, :]
+            last_pose = output[i, :, :]
+        
+        return output
 
 class Discriminator(nn.Module):
     def __init__(self, num_input_features, num_heads, dim_feedforward, dropout, num_layers, seq_length):
