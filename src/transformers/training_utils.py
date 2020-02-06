@@ -5,8 +5,10 @@ import time
 import math
 import numpy as np
 import matplotlib.pyplot as plt
-from torch import optim
+from torch import optim, nn
+import torch.nn.functional as F
 from common.logging import logger
+from common.conversions import *
 
 # importing models
 plt.switch_backend('agg')
@@ -42,15 +44,52 @@ def plotLossesOverTime(losses_over_time):
     plt.xticks(np.arange(1, 21))
     plt.ylabel('scaled MAE loss')
 
+class MotionLoss(nn.Module):
+    def __init__(self, lambdas, stats):
+        super(MotionLoss, self).__init__()
+        self.l_mae = lambdas[0]
+        self.l_angle = lambdas[1]
+        self.l_anthro = lambdas[2]
+        self.mu = stats[0]
+        self.cov = stats[1]
 
-def train(model, optimizer, data, criterion):
+    def maeLoss(self, prediction, target):
+        return F.l1_loss(prediction, target, reduction='mean')
+ 
+    def angleLoss(self, prediction, target, device):
+        prediction = prediction.contiguous().view(-1, 4)
+        target = target.contiguous().view(-1, 4) 
+
+        R_targ = quat_to_rotMat(prediction)
+        R_pred = quat_to_rotMat(target)
+
+        R = R_pred.bmm(torch.transpose(R_targ, 1, 2))
+
+        loss = torch.mean(torch.abs(torch.log(F.relu(R.diagonal(dim1=-2, dim2=-1)) + 1e-8))) 
+
+        return loss
+    #def anthropometricLoss(self, prediction):
+        
+
+    def forward(self, prediction, target):
+        device = prediction.device
+        
+        mae = self.maeLoss(prediction, target)
+        angle = self.angleLoss(prediction, target, device)
+        #anthro = self.anthropometricLoss(prediction)
+        
+        return self.l_mae*mae + self.l_angle*angle #+ self.l_anthro*anthro
+
+def train(model, optimizer, data, training_criterion, device):
     model.train()
     inputs, targets = data
-    inputs = inputs.permute(1, 0, 2).double()
-    targets = targets.permute(1, 0, 2).double()
+
+    inputs = inputs.permute(1, 0, 2).to(device).float()
+    targets = targets.permute(1, 0, 2).to(device).float()
     output = model(inputs)
 
-    loss = criterion(output, targets)
+    loss = training_criterion(output, targets)
+    
     loss.backward()
     
     torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
@@ -60,14 +99,14 @@ def train(model, optimizer, data, criterion):
 
     return loss.item()
 
-def evaluate(model, data, criterion, validation_criterion, scaler):
+def evaluate(model, data, validation_criterion, scaler, device):
     model.eval()
     inputs, targets = data
-    inputs = inputs.permute(1, 0, 2).double()
-    targets = targets.permute(1, 0, 2).double()
+    inputs = inputs.permute(1, 0, 2).to(device).float()
+    targets = targets.permute(1, 0, 2).to(device).float()
     output = model(inputs)
 
-    loss = criterion(output, targets)
+    loss = validation_criterion(output, targets)
     scaled_loss = 0
     for i in range(output.shape[1]):
         if scaler is None:
@@ -81,7 +120,7 @@ def evaluate(model, data, criterion, validation_criterion, scaler):
 
     return loss.item(), scaled_loss / output.shape[1] 
 
-def fit(model, optimizer, scheduler, epochs, dataloaders, criterion, validation_criterion, scaler, device):
+def fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, validation_criterion, scaler, device):
     train_dataloader, val_dataloader = dataloaders
     total_time = 0
     for epoch in range(epochs):
@@ -89,7 +128,7 @@ def fit(model, optimizer, scheduler, epochs, dataloaders, criterion, validation_
         logger.info("Epoch {}".format(epoch))
         for index, data in enumerate(train_dataloader, 0):
             with Timer() as timer:
-                loss = train(model, optimizer, data, criterion) 
+                loss = train(model, optimizer, data, training_criterion, device) 
             losses += loss
             total_time += timer.interval
             if index % (len(train_dataloader) // 10) == 0:
@@ -101,7 +140,7 @@ def fit(model, optimizer, scheduler, epochs, dataloaders, criterion, validation_
         
         with torch.no_grad():
             val_losses, scaled_val_losses = zip(
-                *[evaluate(model, data, criterion, validation_criterion, scaler)
+                *[evaluate(model, data, validation_criterion, scaler, device)
                   for _, data in enumerate(val_dataloader, 0)]
             )
             
