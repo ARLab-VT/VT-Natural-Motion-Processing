@@ -121,7 +121,8 @@ if __name__ == "__main__":
     input_label_request = args.input_label_request.split(" ")
 
     task_output = args.task_output.split(" ")
-    output_label_request = args.output_label_request.split(" ")
+    if args.output_label_request is not None:
+        output_label_request = args.output_label_request.split(" ")
 
     if args.task_input == args.task_output and args.output_label_request is None:
         experiment_setup = {"X" : task_input}
