@@ -27,7 +27,6 @@ np.random.seed(42)
 torch.backends.cudnn.deterministic = False
 torch.backends.cudnn.benchmark = False
 
-
 def parse_args():
     parser = argparse.ArgumentParser()
 
@@ -40,7 +39,7 @@ def parse_args():
     parser.add_argument('--batch-size',
                         help='batch size for training', default=32)
     parser.add_argument('--learning-rate',
-			help='learning rate for encoder and decoder', default=0.001)
+	                    help='learning rate for encoder and decoder', default=0.001)
     parser.add_argument('--seq-length',
                         help='sequence length for encoder/decoder', default=20)
     parser.add_argument('--stride',
@@ -48,13 +47,13 @@ def parse_args():
     parser.add_argument('--num-epochs',
                         help='number of epochs for training', default=1)
     parser.add_argument('--num-heads',
-			help='number of heads in Transformer Encoder')
+                        help='number of heads in Transformer Encoder')
     parser.add_argument('--dim-feedforward',
-			help='number of dimensions in feedforward layer in Transformer Encoder')
+                        help='number of dimensions in feedforward layer in Transformer Encoder')
     parser.add_argument('--dropout',
-			help='dropout percentage in Transformer Encoder')
+                        help='dropout percentage in Transformer Encoder')
     parser.add_argument('--num-layers',
-			help='number of layers in Transformer Encoder')
+                        help='number of layers in Transformer Encoder')
 
     args = parser.parse_args()
 
@@ -69,11 +68,13 @@ if __name__ == "__main__":
     
     for arg in vars(args):
         logger.info("{} - {}".format(arg, getattr(args, arg)))
-    
+
     logger.info("Starting Transformer training...")
+    
+    logger.info("Device count: {}".format(str(torch.cuda.device_count())))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
+    logger.info("Training on {}...".format(device))    
     seq_length = int(args.seq_length)
     stride = int(args.stride)
     lr = float(args.learning_rate)
@@ -82,30 +83,20 @@ if __name__ == "__main__":
     
     X, y = read_variables(train_file_path, args.task, seq_length, stride)
 
-    logger.info("{}, {}".format(X.shape, y.shape))
-
     encoder_feature_size = X.shape[1]
     decoder_feature_size = y.shape[1]
 
     val_file_path = args.data_path + '/validation.h5'    
     
     X_val, y_val = read_variables(val_file_path, args.task, seq_length, stride)   
-
+    
     scaler = None
-    y_scaler = StandardScaler().fit(np.append(y, y_val, axis=0))
-    y = y_scaler.transform(y)
     y = reshape_to_sequences(y, seq_length)
  
-    y_val = y_scaler.transform(y_val)
     y_val = reshape_to_sequences(y_val, seq_length)
     
-    X_scaler = StandardScaler().fit(np.append(X, X_val, axis=0))
-    X = X_scaler.transform(X)
-    X -= np.mean(X, axis=0)
     X = reshape_to_sequences(X, seq_length)
 
-    X_val = X_scaler.transform(X_val)
-    X_val -= np.mean(X_val, axis=0)
     X_val = reshape_to_sequences(X_val, seq_length)
 
     X, y = torch.tensor(X), torch.tensor(y)
@@ -129,19 +120,27 @@ if __name__ == "__main__":
     dropout = float(args.dropout)
     num_layers = int(args.num_layers)
 
-    model = MotionTransformer(encoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size).double()
+    model = MotionTransformer(encoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size)
+
+    logger.info("Device count: {}".format(str(torch.cuda.device_count())))
+    if torch.cuda.device_count() > 1:
+        model = nn.DataParallel(model)
+
+    model = model.to(device).float()
+
     epochs = int(args.num_epochs)
-    optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9) 
-    scheduler = optim.lr_scheduler.StepLR(optimizer, 1.0, 0.95)
+    optimizer = optim.AdamW(model.parameters(), lr=1e-3)#, momentum=0.9) 
+    scheduler = optim.lr_scheduler.StepLR(optimizer, 1.0, 1.0)
     dataloaders = (train_dataloader, val_dataloader)
-    criterion = nn.L1Loss()
+    lambdas, stats = (1,1,1), (1,1)
+    training_criterion = MotionLoss(lambdas, stats)
     validation_criterion = nn.L1Loss()
     
     logger.info("Model for training: {}".format(str(model)))
     logger.info("Optimizer for training: {}".format(str(optimizer)))
-    logger.info("Criterion for training: {}".format(str(criterion)))
+    logger.info("Criterion for training: {}".format(str(training_criterion)))
 
-    fit(model, optimizer, scheduler, epochs, dataloaders, criterion, validation_criterion, scaler, device)
+    fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, validation_criterion, scaler, device)
     
     torch.save({
         'model_state_dict': model.state_dict(),
