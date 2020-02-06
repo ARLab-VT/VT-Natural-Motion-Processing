@@ -44,7 +44,7 @@ class DecoderRNN(nn.Module):
         output, hidden = self.gru(input, hidden)
         output = self.dropout(output)
         output = self.out(output)
-        return output, hidden
+        return output + input, hidden
 
     def initHidden(self):
         return torch.zeros(1, self.batch_size, self.hidden_size, device=device)
@@ -105,7 +105,7 @@ class AttnDecoderRNN(nn.Module):
 
         # output = [batch_size, output_dim]
 
-        return output.unsqueeze(0), hidden
+        return output.unsqueeze(0) + input, hidden
 
 
 class Attention(nn.Module):

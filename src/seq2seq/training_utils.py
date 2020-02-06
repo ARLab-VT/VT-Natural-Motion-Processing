@@ -9,7 +9,7 @@ from torch import optim
 from common.logging import logger
 
 # importing models
-from seq2seq import *
+from .seq2seq import *
 plt.switch_backend('agg')
 torch.manual_seed(0)
 
@@ -123,20 +123,16 @@ def loss_batch(data, models, opts, criterion, device, scaler=None, teacher_forci
 
         target = target_batch[:, t, :].unsqueeze(0).float()
 
-        loss += criterion(decoder_output, target)
+        prediction = decoder_input + decoder_output
 
-        if opts is None and scaler is not None:
-            scaled_loss_temp = criterion(torch.tensor(scaler.inverse_transform(decoder_output.squeeze(0).cpu())),
-                                         torch.tensor(scaler.inverse_transform(target.squeeze(0).cpu())))
-            scaled_loss += scaled_loss_temp
-            scaled_loss_over_time[t] = scaled_loss_temp
+        loss += criterion(prediction, target)
 
         if use_teacher_forcing:
             decoder_input = target
         else:
             if torch.all(torch.eq(decoder_output, EOS)):
                 break
-            decoder_input = decoder_output.detach()
+            decoder_input = prediction.detach()
 
     if opts is not None:
         loss.backward()
@@ -146,10 +142,8 @@ def loss_batch(data, models, opts, criterion, device, scaler=None, teacher_forci
 
         decoder_opt.step()
         decoder_opt.zero_grad()
-    else:
-        scaled_loss = scaled_loss.item() / seq_length
 
-    return loss.item() / seq_length, scaled_loss, scaled_loss_over_time
+    return loss.item() / seq_length
 
 
 def fit(models, optims, epochs, dataloaders, criterion, scaler, device,
@@ -160,7 +154,6 @@ def fit(models, optims, epochs, dataloaders, criterion, scaler, device,
         fig_filename='training_plot.png'):
 
     train_dataloader, val_dataloader = dataloaders
-    scaled_val_losses_over_time = None
 
     num_batches = len(train_dataloader)
     batch_size = len(train_dataloader.dataset[0])
@@ -177,9 +170,9 @@ def fit(models, optims, epochs, dataloaders, criterion, scaler, device,
 
         for index, data in enumerate(train_dataloader, 0):
             with Timer() as timer:
-                loss, _, _ = loss_batch(data, models,
-                                        optims, criterion, device,
-                                        use_attention=use_attention)
+                loss = loss_batch(data, models,
+                                  optims, criterion, device,
+                                  use_attention=use_attention)
 
                 losses.append(loss)
             total_time += timer.interval
@@ -190,24 +183,16 @@ def fit(models, optims, epochs, dataloaders, criterion, scaler, device,
                                                                                                        str(loss)))
 
         with torch.no_grad():
-            val_losses, scaled_val_losses, scaled_val_losses_over_time = zip(
-                *[loss_batch(data, models, None, criterion, device, use_attention=use_attention, scaler=scaler)
-                  for _, data in enumerate(val_dataloader, 0)]
-            )
+            val_losses = [loss_batch(data, models, None, criterion, device, use_attention=use_attention, scaler=scaler)
+                          for _, data in enumerate(val_dataloader, 0)]
 
         loss = np.sum(losses) / len(losses)
         val_loss = np.sum(val_losses) / len(val_losses)
-        scaled_val_loss = np.sum(scaled_val_losses) / len(scaled_val_losses)
-
-        if epoch == epochs - 1:
-            scaled_val_losses_over_time = torch.stack(
-                scaled_val_losses_over_time)
-            scaled_val_loss_over_time = scaled_val_losses_over_time.mean(0)
 
         plot_losses.append((loss, val_loss))
 
         print()
-        logger.info("Training Loss: {} - Val Loss: {} - Scaled Val Loss: {}".format(str(loss), str(val_loss), str(scaled_val_loss)))
+        logger.info("Training Loss: {} - Val Loss: {}".format(str(loss), str(val_loss)))
 
         teacher_forcing_ratio *= schedule_rate
 
