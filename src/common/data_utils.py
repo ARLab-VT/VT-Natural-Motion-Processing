@@ -5,6 +5,8 @@ import h5py
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import RobustScaler
 import os
+from .logging import *
+import sys
 from .conversions import *
 
 class XSensDataIndices:
@@ -15,7 +17,7 @@ class XSensDataIndices:
 
         segment_group = ['position', 'velocity', 'acceleration',
                          'angularVelocity', 'angularAcceleration',
-                         'orientation', 'smoothedOrientation', 'relativePosition']
+                         'orientation', 'smoothedOrientation', 'normOrientation', 'relativePosition']
 
         joint_group = ['jointAngle', 'jointAngleExpmap', 'jointAngleXZY']
 
@@ -67,7 +69,7 @@ class XSensDataIndices:
             req_items = valid_items
 
         num_valid_items = len(valid_items)
-        dims = 4 if req_label in ['orientation', 'smoothedOrientation'] else 3
+        dims = 4 if req_label in ['orientation', 'smoothedOrientation', 'normOrientation'] else 3
 
         indices = [list(range(i, i+dims))
                    for i in range(0, dims*num_valid_items, dims)]
@@ -147,17 +149,50 @@ def add_continuous_quaternions(filepaths, group_name, new_group_name):
 
         cont_quat = qfix(quat)
 
-        cont_quat = cont_quat.reshape(cont_orient.shape[0], -1)
-        cont_orient = cont_quat.reshape(cont_orient.shape[1], cont_orient.shape[0])
+        cont_quat = cont_quat.reshape(cont_quat.shape[0], -1)
+        cont_quat = cont_quat.reshape(cont_quat.shape[1], cont_quat.shape[0])
         
         try:            
             print("Writing to file {}".format(filepath))
-            h5_file.create_dataset(new_group_name, data=cont_orient)
+            h5_file.create_dataset(new_group_name, data=cont_quat)
         except RuntimeError:
             print("RuntimeError: Unable to create link (name already exists) in {}".format(
                   filepath))
         h5_file.close()
 
+def add_normalized_quaternions(filepaths, group_name, new_group_name):
+    for filepath in filepaths:
+        try:
+            h5_file = h5py.File(filepath, 'r+')
+        except OSError:
+            print("OSError: Unable to open file {}".format(filepath))
+            continue
+
+        quat = np.array(h5_file[group_name][:, :]) 
+        quat = quat.reshape(quat.shape[1], quat.shape[0])
+        quat = quat.reshape(quat.shape[0], -1, 4)
+
+        norm_quat = np.zeros(quat.shape)
+
+        pelvis = np.linalg.inv(quat_to_rotMat(torch.tensor(quat[:, 0, :])))
+        for i in range(0, quat.shape[1]):
+            rotMat = quat_to_rotMat(torch.tensor(quat[:, i, :])) 
+            norm_rotMat = np.matmul(pelvis, rotMat)
+            norm_quat[:, i, :] = rotMat_to_quat(norm_rotMat)
+
+        norm_quat = norm_quat.reshape(norm_quat.shape[0], -1) 
+        norm_quat = norm_quat.reshape(norm_quat.shape[1], norm_quat.shape[0])
+
+        try:            
+            print("Writing to file {}".format(filepath))
+            nquat = h5_file[new_group_name]
+            nquat[...] = norm_quat
+            #h5_file.create_dataset(new_group_name, data=norm_quat)
+        except RuntimeError:
+            print("RuntimeError: Unable to create link (name already exists) in {}".format(
+                  filepath))
+        h5_file.close()
+        
 
 def qfix(q):
     """
