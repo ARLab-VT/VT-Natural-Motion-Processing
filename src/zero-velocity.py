@@ -21,24 +21,11 @@ import time
 import argparse
 import h5py
 
-torch.manual_seed(42)
-np.random.seed(42)
-
-torch.backends.cudnn.deterministic = False
-torch.backends.cudnn.benchmark = False
-
-
-
-
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--task',
-                        help='task for neural network to train on; either prediction or conversion')
     parser.add_argument('--data-path',
                         help='path to h5 files containing data (must contain training.h5 and validation.h5)')
-    parser.add_argument('--model-file-path',
-                        help='path to model file for saving it after training')
     parser.add_argument('--batch-size',
                         help='batch size for training', default=32)
     parser.add_argument('--seq-length',
@@ -53,14 +40,12 @@ def parse_args():
 
     return args
 
-def zeroVelocity(dataloaders, criterion, seq_length):
-    # just loop through the dataloaders tuple and know that it goes train, val, test
+def zero_velocity(dataloaders, criterion, seq_length):
     name = ["Training", "Validation", "Testing"]
-    type_num = 0
     train_dataloader, val_dataloader, test_dataloader = dataloaders
     
     # zero velocity
-    for i in range(len(dataloaders)): 
+    for i in range(len(dataloaders)):
         avg_loss = 0
         for index, data in enumerate(dataloaders[i], 0):
             inputs, targets = data
@@ -68,17 +53,17 @@ def zeroVelocity(dataloaders, criterion, seq_length):
             predictions = final.repeat(1,seq_length,1)
             loss = criterion(targets, predictions)
             avg_loss += loss
-        avg_loss = avg_loss / len(train_dataloader)
-        logger.info("{} average loss {}".format(name[type_num], avg_loss))
-        type_num += 1
+        avg_loss = avg_loss / len(dataloaders[i])
+        logger.info("{} average loss: {}".format(name[i], avg_loss))
 
 
 def load_dataloader(args, type): 
     file_path = args.data_path + '/' + type + '.h5'
     seq_length = int(args.seq_length)
     batch_size = int(args.batch_size)
+    stride = int(args.stride)
     
-    X, y = read_variables(file_path, args.task, seq_length, int(args.stride))
+    X, y = read_variables(file_path, 'prediction', seq_length, stride)
 
     logger.info("{} shapes (X, y): {}, {}".format(type, X.shape, y.shape))
 
@@ -88,12 +73,12 @@ def load_dataloader(args, type):
     logger.info("Reshaped {} shapes (X, y):{}, {}".format(type, X.shape, y.shape))
     
     X, y = torch.tensor(X), torch.tensor(y)
-    train_dataset = TensorDataset(X, y)
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
+    dataset = TensorDataset(X, y)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
-    logger.info("Number of {} samples: {}".format(type, len(train_dataset)))
+    logger.info("Number of {} samples: {}".format(type, len(dataset)))
 
-    return train_dataloader
+    return dataloader
 
 
 if __name__ == "__main__":
@@ -109,15 +94,11 @@ if __name__ == "__main__":
     seq_length = int(args.seq_length)
     batch_size = int(args.batch_size)
 
-    # training
     train_dataloader = load_dataloader(args, "training")
     val_dataloader = load_dataloader(args, "validation")
     test_dataloader = load_dataloader(args, "testing")
 
-    criterion = nn.L1Loss()
+    criterion = ShapeLoss()
     logger.info("Criterion for zero velocity: {}".format(str(criterion)))
     dataloaders = (train_dataloader, val_dataloader, test_dataloader)
-    zeroVelocity(dataloaders, criterion, seq_length)
-
-    
-
+    zero_velocity(dataloaders, criterion, seq_length)

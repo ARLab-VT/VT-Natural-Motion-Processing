@@ -1,12 +1,13 @@
-
-python train-transformer.py --task prediction \
-                        --data-path ./prediction-dataset \
-                        --model-file-path ./models/orientation-model-160-adamw.pt \
+python train-transformer.py --task conversion \
+                        --data-path ./conversion-dataset \
+                        --model-file-path ./models/conversion-model-16-epochs.pt \
                         --batch-size=16 \
                         --seq-length=160 \
-                        --stride=32 \
-                        --learning-rate=0.1 \
-                        --num-epochs=20 \
+                        --stride=20 \
+                        --learning-rate=0.001 \
+                        --beta-one=0.99 \
+                        --beta-two=0.999 \
+                        --num-epochs=16 \
                         --num-heads=4 \
                         --dim-feedforward=512 \
                         --dropout=0.1 \

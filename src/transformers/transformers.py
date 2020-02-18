@@ -9,7 +9,6 @@ class PositionalEncoding(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
         pe = torch.zeros(max_len, d_model)
-        print(pe.shape)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
         pe[:, 0::2] = torch.sin(position * div_term)
@@ -60,6 +59,40 @@ class MotionTransformer(nn.Module):
             last_pose = output[i, :, :]
         
         return output
+
+
+class ConversionTransformer(nn.Module):    
+    def __init__(self, num_input_features, num_heads, dim_feedforward, dropout, num_layers, num_output_features): 
+        super(ConversionTransformer, self).__init__()
+        self.pos_encoder = PositionalEncoding(num_input_features, dropout)
+        self.encoder_layer = nn.TransformerEncoderLayer(num_input_features, 
+                                                        num_heads,
+                                                        dim_feedforward=dim_feedforward,
+                                                        dropout=dropout)
+        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers, norm=None)
+        self.decoder = nn.Linear(num_input_features, num_output_features)
+        self.src_mask = None
+    
+    def _generate_square_subsequent_mask(self, sz):
+        mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
+        mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+        return mask
+    
+    def init_weights(self):
+        initrange = 0.1
+        self.decoder.bias.data.zero_()
+        self.decoder.weight.data.uniform_(-initrange, initrange)
+
+    def forward(self, src):
+        if self.src_mask is None or self.src_mask.size(0) != len(src):
+            device = src.device
+            mask = self._generate_square_subsequent_mask(len(src)).to(device)
+            self.src_mask = mask
+        pos_enc = self.pos_encoder(src)
+        output = self.encoder(pos_enc, self.src_mask)
+        output = self.decoder(output)
+        return output
+
 
 class Discriminator(nn.Module):
     def __init__(self, num_input_features, num_heads, dim_feedforward, dropout, num_layers, seq_length):

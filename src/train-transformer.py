@@ -39,7 +39,11 @@ def parse_args():
     parser.add_argument('--batch-size',
                         help='batch size for training', default=32)
     parser.add_argument('--learning-rate',
-	                    help='learning rate for encoder and decoder', default=0.001)
+	                    help='initial learning rate for training', default=0.001)
+    parser.add_argument('--beta-one',
+	                    help='beta1 for adam optimizer (momentum)', default=0.9)
+    parser.add_argument('--beta-two',
+	                    help='beta2 for adam optimizer', default=0.999)
     parser.add_argument('--seq-length',
                         help='sequence length for encoder/decoder', default=20)
     parser.add_argument('--stride',
@@ -88,22 +92,19 @@ if __name__ == "__main__":
 
     val_file_path = args.data_path + '/validation.h5'    
     
-    X_val, y_val = read_variables(val_file_path, args.task, seq_length, stride)   
+    X_val, y_val = read_variables(val_file_path, args.task, seq_length, 80)   
     
     scaler = None
-    y = reshape_to_sequences(y, seq_length)
- 
-    y_val = reshape_to_sequences(y_val, seq_length)
-    
-    X = reshape_to_sequences(X, seq_length)
+    X = X.view(-1, seq_length, X.shape[1])
+    X_val = X_val.view(-1, seq_length, X_val.shape[1])
 
-    X_val = reshape_to_sequences(X_val, seq_length)
-
-    X, y = torch.tensor(X), torch.tensor(y)
-    X_val, y_val = torch.tensor(X_val), torch.tensor(y_val)
+    y = y.view(-1, seq_length, y.shape[1])
+    y_val = y_val.view(-1, seq_length, y_val.shape[1])
 
     logger.info("Training shapes (X, y): {}, {}".format(X.shape, y.shape))
-    logger.info("Validation shapes (X, y): {}, {}".format(X_val.shape, y_val.shape))    
+    logger.info("Validation shapes (X, y): {}, {}".format(X_val.shape, y_val.shape))
+    memory = X.element_size() * X.nelement() + y.element_size() * y.nelement() + X_val.element_size() * X_val.nelement() + y_val.element_size() * y_val.nelement()  
+    logger.info("Memory requirement for training and validation: {}".format(memory))
 
     train_dataset = TensorDataset(X, y)
     val_dataset = TensorDataset(X_val, y_val)
@@ -112,15 +113,15 @@ if __name__ == "__main__":
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
-    logger.info("Number of training samples: {}".format(len(train_dataset)))
-    logger.info("Number of validation samples: {}".format(len(val_dataset)))
-    
     num_heads = int(args.num_heads)
     dim_feedforward = int(args.dim_feedforward)
     dropout = float(args.dropout)
     num_layers = int(args.num_layers)
 
-    model = MotionTransformer(encoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size)
+    if args.task == 'prediction':
+        model = MotionTransformer(encoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size)
+    else:
+        model = ConversionTransformer(encoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size)    
 
     logger.info("Device count: {}".format(str(torch.cuda.device_count())))
     if torch.cuda.device_count() > 1:
@@ -129,20 +130,17 @@ if __name__ == "__main__":
     model = model.to(device).float()
 
     epochs = int(args.num_epochs)
-    optimizer = optim.AdamW(model.parameters(), lr=1e-3)#, momentum=0.9) 
-    scheduler = optim.lr_scheduler.StepLR(optimizer, 1.0, 1.0)
+    beta1 = float(args.beta_one)
+    beta2 = float(args.beta_two)
+
+    optimizer = optim.AdamW(model.parameters(), lr=lr, betas=(beta1, beta2)) 
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[4,8,12], gamma=0.3)
     dataloaders = (train_dataloader, val_dataloader)
-    lambdas, stats = (1,1,1), (1,1)
-    training_criterion = MotionLoss(lambdas, stats)
+    training_criterion = MotionLoss(1.0, 0.0, 1.0)
     validation_criterion = nn.L1Loss()
     
     logger.info("Model for training: {}".format(str(model)))
     logger.info("Optimizer for training: {}".format(str(optimizer)))
     logger.info("Criterion for training: {}".format(str(training_criterion)))
 
-    fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, validation_criterion, scaler, device)
-    
-    torch.save({
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-    }, args.model_file_path)
+    fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, validation_criterion, scaler, device, args.model_file_path) 

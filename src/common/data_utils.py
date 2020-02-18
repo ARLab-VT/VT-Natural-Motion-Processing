@@ -13,11 +13,13 @@ class XSensDataIndices:
     def __init__(self):
         sensor_group = ['sensorFreeAcceleration',
                         'sensorMagneticField',
-                        'sensorOrientation']
+                        'sensorOrientation',
+                        'normSensorOrientation']
 
         segment_group = ['position', 'velocity', 'acceleration',
                          'angularVelocity', 'angularAcceleration',
-                         'orientation', 'smoothedOrientation', 'normOrientation', 'relativePosition']
+                         'orientation', 'smoothedOrientation', 'normOrientation', 
+                         'relativePosition']
 
         joint_group = ['jointAngle', 'jointAngleExpmap', 'jointAngleXZY']
 
@@ -69,7 +71,7 @@ class XSensDataIndices:
             req_items = valid_items
 
         num_valid_items = len(valid_items)
-        dims = 4 if req_label in ['orientation', 'smoothedOrientation', 'normOrientation'] else 3
+        dims = 4 if req_label in ['orientation', 'smoothedOrientation', 'normOrientation', 'normSensorOrientation'] else 3
 
         indices = [list(range(i, i+dims))
                    for i in range(0, dims*num_valid_items, dims)]
@@ -172,6 +174,8 @@ def add_normalized_quaternions(filepaths, group_name, new_group_name):
         quat = quat.reshape(quat.shape[1], quat.shape[0])
         quat = quat.reshape(quat.shape[0], -1, 4)
 
+        quat = qfix(quat)
+
         norm_quat = np.zeros(quat.shape)
 
         pelvis = np.linalg.inv(quat_to_rotMat(torch.tensor(quat[:, 0, :])))
@@ -185,9 +189,9 @@ def add_normalized_quaternions(filepaths, group_name, new_group_name):
 
         try:            
             print("Writing to file {}".format(filepath))
-            nquat = h5_file[new_group_name]
-            nquat[...] = norm_quat
-            #h5_file.create_dataset(new_group_name, data=norm_quat)
+            #nquat = h5_file[new_group_name]
+            #nquat[...] = norm_quat
+            h5_file.create_dataset(new_group_name, data=norm_quat)
         except RuntimeError:
             print("RuntimeError: Unable to create link (name already exists) in {}".format(
                   filepath))
@@ -223,12 +227,6 @@ def discard_remainder(data, seq_length):
     return data
 
 
-def reshape_to_sequences(data, seq_length):
-    data = discard_remainder(data, seq_length)
-    data = data.reshape(-1, seq_length, data.shape[1])
-    return data
-
-
 def pad_sequences(sequences, maxlen, start_char=False, padding='post'):
     if start_char:
         sequences = np.append(
@@ -252,6 +250,13 @@ def split_sequences(data, seq_length, stride):
     X = np.concatenate(X, axis=0)
     y = np.concatenate(y, axis=0)
     return X, y
+
+def stride_sequences(data, seq_length, stride, offset=0):
+    output = []
+    for i in range(0, data.shape[0] - 2*seq_length, stride):
+        output.append(data[i+offset:i+seq_length+offset, :])
+    output = np.concatenate(output, axis=0)
+    return output
 
 
 def read_h5(filepaths, requests):
@@ -292,19 +297,21 @@ def read_variables(h5_file_path, task, seq_length, stride):
         X_temp = discard_remainder(X_temp, 2*seq_length)
 
         if task == 'prediction':
-            X_temp, y_temp = split_sequences(X_temp, seq_length, stride)
+            y_temp = stride_sequences(X_temp, seq_length, stride, offset=seq_length)
         elif task == 'conversion':
             y_temp = h5_file[filename]['Y']
-            y_temp = discard_remainder(y_temp, 2*seq_length)
+            y_temp = stride_sequences(y_temp, seq_length, stride)
         else:
             logger.error("Task must be either prediction or conversion, found {}".format(task))
             sys.exit()
+
+        X_temp = stride_sequences(X_temp, seq_length, stride)
         
         if X is None and y is None:
-            X = X_temp
-            y = y_temp
+            X = torch.tensor(X_temp)
+            y = torch.tensor(y_temp)
         else:
-            X = np.append(X, X_temp, axis=0)
-            y = np.append(y, y_temp, axis=0)
+            X = torch.cat((X, torch.tensor(X_temp)), dim=0)
+            y = torch.cat((y, torch.tensor(y_temp)), dim=0)
     h5_file.close()
     return X, y
