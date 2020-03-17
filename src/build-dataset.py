@@ -73,7 +73,7 @@ def parse_args():
         if args.output_label_request is None:
             logger.info("Will create h5 files with only input data for self-supervision tasks...")
         else:
-            logger.error("Will create h5 files with input and output data.")
+            logger.info("Will create h5 files with input and output data.")
 
     return args
 
