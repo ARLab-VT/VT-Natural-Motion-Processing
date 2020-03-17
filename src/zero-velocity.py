@@ -32,7 +32,6 @@ def parse_args():
                         help='sequence length for encoder/decoder', default=20)
     parser.add_argument('--stride',
                         help='stride used when running prediction tasks', default=3)          
-
     args = parser.parse_args()
 
     if args.data_path is None:
@@ -54,36 +53,11 @@ def zero_velocity(dataloaders, criterion, seq_length):
             loss = criterion(targets, predictions)
             avg_loss += loss
         avg_loss = avg_loss / len(dataloaders[i])
-        logger.info("{} average loss: {}".format(name[i], avg_loss))
-
-
-def load_dataloader(args, type): 
-    file_path = args.data_path + '/' + type + '.h5'
-    seq_length = int(args.seq_length)
-    batch_size = int(args.batch_size)
-    stride = int(args.stride)
-    
-    X, y = read_variables(file_path, 'prediction', seq_length, stride)
-
-    logger.info("{} shapes (X, y): {}, {}".format(type, X.shape, y.shape))
-
-    y = reshape_to_sequences(y, seq_length)
-    X = reshape_to_sequences(X, seq_length)
-
-    logger.info("Reshaped {} shapes (X, y):{}, {}".format(type, X.shape, y.shape))
-    
-    X, y = torch.tensor(X), torch.tensor(y)
-    dataset = TensorDataset(X, y)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
-
-    logger.info("Number of {} samples: {}".format(type, len(dataset)))
-
-    return dataloader
-
+        logger.info("Given {} criterion, {} loss: {}".format(criterion, name[i], avg_loss))
 
 if __name__ == "__main__":
     args = parse_args()
-    
+    args.task = 'prediction'
     for arg in vars(args):
         logger.info("{} - {}".format(arg, getattr(args, arg)))
     
@@ -92,13 +66,14 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     seq_length = int(args.seq_length)
-    batch_size = int(args.batch_size)
 
     train_dataloader = load_dataloader(args, "training")
     val_dataloader = load_dataloader(args, "validation")
     test_dataloader = load_dataloader(args, "testing")
-
-    criterion = ShapeLoss()
-    logger.info("Criterion for zero velocity: {}".format(str(criterion)))
+    
     dataloaders = (train_dataloader, val_dataloader, test_dataloader)
-    zero_velocity(dataloaders, criterion, seq_length)
+    
+    criteria = (nn.L1Loss(), nn.SmoothL1Loss(), ExpmapToQuatLoss())
+    for criterion in criteria:
+        logger.info("Criterion for zero velocity: {}".format(str(criterion)))
+        zero_velocity(dataloaders, criterion, seq_length)
