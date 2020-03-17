@@ -5,6 +5,7 @@ import warnings
 import h5py
 import matplotlib.pyplot as plt
 import os
+import math
 from scipy.spatial.transform import Rotation as R
 from scipy.linalg import norm
 from .logging import logger
@@ -60,11 +61,14 @@ def rotMat_to_quat(rotMat):
     Converts rotation matrices back to quaternions.
     Ported from https://github.com/asheshjain399/RNNexp/blob/srnn/structural_rnn/CRFProblems/H3.6m/mhmublv/Motion/rotmat2quat.m#L4
     """
+    if len(rotMat.shape) != 3:
+        rotMat = rotMat.unsqueeze(0)
 
     assert rotMat.shape[1] == 3 and rotMat.shape[2] == 3   
+    
     diffMat = rotMat - torch.transpose(rotMat, 1, 2)
 
-    r = torch.zeros((rotMat.shape[0], 3), dtype=torch.float64)
+    r = torch.zeros((rotMat.shape[0], 3), dtype=torch.float64).to(rotMat.device)
 
     r[:,0] = -diffMat[:, 1, 2]
     r[:,1] = diffMat[:, 0, 2]
@@ -73,7 +77,7 @@ def rotMat_to_quat(rotMat):
     sin_theta = torch.norm(r, dim=1)/2
     sin_theta = sin_theta.unsqueeze(1)
     
-    r0 = r / (torch.norm(r, dim=1).unsqueeze(1) + np.finfo(np.float32).eps)
+    r0 = r / (torch.norm(r, dim=1).unsqueeze(1) + 1e-9)
 
     cos_theta = (rotMat.diagonal(dim1=-2, dim2=-1).sum(-1) - 1) / 2
     cos_theta = cos_theta.unsqueeze(1)
@@ -82,7 +86,7 @@ def rotMat_to_quat(rotMat):
 
     theta = theta.squeeze(1)
 
-    q = torch.zeros((rotMat.shape[0], 4), dtype=torch.float64)
+    q = torch.zeros((rotMat.shape[0], 4), dtype=torch.float64).to(rotMat.device)
 
     q[:, 0] = torch.cos(theta/2)
     q[:, 1:] = r0*torch.sin(theta/2).unsqueeze(1)
@@ -90,30 +94,69 @@ def rotMat_to_quat(rotMat):
     return q 
 
 def quat_to_expmap(q):
-    """
+    """ 
     Quaternion conversion to exponential map.
-    Assumes quaternions is of size N x 4*M where N is the number of frames and M is the number joints.
+    Assumes quaternions is of size N x 4 where N is the number of quaternions.
     Ported from https://github.com/asheshjain399/RNNexp/blob/srnn/structural_rnn/CRFProblems/H3.6m/mhmublv/Motion/quat2expmap.m
     """
-    assert q.shape[1] % 4 == 0
-     
-    expmap = np.zeros((q.shape[0], 3 * (q.shape[1] // 4)))
-
-    for i in range(q.shape[1] // 4):
-        joint_quat = q[:, 4*i:4*(i+1)]
-        sin_half_theta = norm(joint_quat[:, 1:])
-        cos_half_theta = joint_quat[:, 0]
+    if len(q.shape) != 2:
+        q = q.unsqueeze(0)
     
-        r0 = np.divide(joint_quat[:,1:], (sin_half_theta + np.finfo(np.float32).eps))
-    
-        theta = 2 * np.arctan2(sin_half_theta, cos_half_theta)
-        theta = np.mod(theta + 2*np.pi, 2*np.pi)
-    
-        r0[theta > np.pi] *= -1
-        theta[theta > np.pi] = 2*np.pi - theta[theta > np.pi]
+    assert q.shape[1] == 4
 
-        theta = np.expand_dims(theta, axis=1)
+    N = q.shape[0]    
 
-        expmap[:, 3*i:3*(i+1)] = np.multiply(theta, r0)
+    expmap = torch.zeros(N, 3)
+
+    sin_half_theta = torch.norm(q[:, 1:], dim=1).unsqueeze(1)
+    cos_half_theta = q[:, 0].unsqueeze(1)
+
+    r0 = q[:, 1:] / (sin_half_theta + 1e-9)
+
+    theta = 2 * torch.atan2(sin_half_theta, cos_half_theta).squeeze(1)
+
+    theta = torch.fmod(theta + 2*math.pi, 2*math.pi)
+
+    r0[theta > math.pi] *= -1
+    theta[theta > math.pi] = 2*math.pi - theta[theta > math.pi]
+
+    theta = theta.unsqueeze(1)
+
+    expmap = theta * r0
 
     return expmap
+
+
+def expmap_to_rotMat(expmap):
+    """ 
+    Exponential map conversion to rotation matrices. Useful for visualization.
+    Assumes expmap is of size N x 3 where N is the number of frames.
+    Ported from https://github.com/asheshjain399/RNNexp/blob/srnn/structural_rnn/CRFProblems/H3.6m/mhmublv/Motion/expmap2rotmat.m
+    """    
+    if len(expmap.shape) != 2:
+        expmap = expmap.unsqueeze(0)
+    
+    assert expmap.shape[1] == 3
+    
+    N = expmap.shape[0]
+
+    theta = torch.norm(expmap, dim=1).unsqueeze(1)
+    sin_theta = torch.sin(theta).unsqueeze(2)
+    cos_theta = torch.cos(theta).unsqueeze(2)
+
+    r0 = expmap / (theta + 1e-10)
+
+    r0x = torch.zeros(N, 3, 3, dtype=torch.float64).to(expmap.device)
+    
+    r0x[:,0,1] = -r0[:,2]
+    r0x[:,0,2] = r0[:,1]
+    r0x[:,1,2] = -r0[:,0]
+
+    r0x = r0x - torch.transpose(r0x, 1, 2)
+    
+    I = torch.eye(3, dtype=torch.float64).unsqueeze(0).repeat(N,1,1).to(expmap.device)
+    ones = torch.ones(N,1,1, dtype=torch.float64).to(expmap.device)
+    
+    rotMat = I + sin_theta*r0x + (ones - cos_theta)*torch.bmm(r0x,r0x)
+    
+    return rotMat
