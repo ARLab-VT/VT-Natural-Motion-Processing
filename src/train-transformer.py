@@ -34,6 +34,8 @@ def parse_args():
                         help='task for neural network to train on; either prediction or conversion')
     parser.add_argument('--data-path',
                         help='path to h5 files containing data (must contain training.h5 and validation.h5)')
+    parser.add_argument('--representation',
+                        help='data representation (quaternions, expmap, rotmat)', default='quaternions')
     parser.add_argument('--model-file-path',
                         help='path to model file for saving it after training')
     parser.add_argument('--batch-size',
@@ -80,38 +82,13 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Training on {}...".format(device))    
     seq_length = int(args.seq_length)
-    stride = int(args.stride)
     lr = float(args.learning_rate)
+    
+    train_dataloader = load_dataloader(args, "training")
+    val_dataloader = load_dataloader(args, "validation")
  
-    train_file_path = args.data_path + '/training.h5'
-    
-    X, y = read_variables(train_file_path, args.task, seq_length, stride)
-
-    encoder_feature_size = X.shape[1]
-    decoder_feature_size = y.shape[1]
-
-    val_file_path = args.data_path + '/validation.h5'    
-    
-    X_val, y_val = read_variables(val_file_path, args.task, seq_length, 80)   
-    
-    scaler = None
-    X = X.view(-1, seq_length, X.shape[1])
-    X_val = X_val.view(-1, seq_length, X_val.shape[1])
-
-    y = y.view(-1, seq_length, y.shape[1])
-    y_val = y_val.view(-1, seq_length, y_val.shape[1])
-
-    logger.info("Training shapes (X, y): {}, {}".format(X.shape, y.shape))
-    logger.info("Validation shapes (X, y): {}, {}".format(X_val.shape, y_val.shape))
-    memory = X.element_size() * X.nelement() + y.element_size() * y.nelement() + X_val.element_size() * X_val.nelement() + y_val.element_size() * y_val.nelement()  
-    logger.info("Memory requirement for training and validation: {}".format(memory))
-
-    train_dataset = TensorDataset(X, y)
-    val_dataset = TensorDataset(X_val, y_val)
-
-    batch_size = int(args.batch_size)
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
+    encoder_feature_size = train_dataloader.dataset[0][0].shape[1]
+    decoder_feature_size = train_dataloader.dataset[0][1].shape[1]
 
     num_heads = int(args.num_heads)
     dim_feedforward = int(args.dim_feedforward)
@@ -119,11 +96,12 @@ if __name__ == "__main__":
     num_layers = int(args.num_layers)
 
     if args.task == 'prediction':
-        model = MotionTransformer(encoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size)
+        model = MotionTransformer(encoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size, representation=args.representation)
     else:
         model = ConversionTransformer(encoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size)    
+    
+    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)    
 
-    logger.info("Device count: {}".format(str(torch.cuda.device_count())))
     if torch.cuda.device_count() > 1:
         model = nn.DataParallel(model)
 
@@ -134,13 +112,17 @@ if __name__ == "__main__":
     beta2 = float(args.beta_two)
 
     optimizer = optim.AdamW(model.parameters(), lr=lr, betas=(beta1, beta2)) 
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[4,8,12], gamma=0.3)
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[2,4,6], gamma=0.1)
     dataloaders = (train_dataloader, val_dataloader)
-    training_criterion = MotionLoss(1.0, 0.0, 1.0)
-    validation_criterion = nn.L1Loss()
+    training_criterion = nn.L1Loss()
+    validation_criteria = [nn.L1Loss()]
     
+    if args.representation == 'expmap':
+        validation_criteria.append(ExpmapToQuatLoss())
+
     logger.info("Model for training: {}".format(str(model)))
+    logger.info("Number of parameters: {}".format(str(num_params)))
     logger.info("Optimizer for training: {}".format(str(optimizer)))
     logger.info("Criterion for training: {}".format(str(training_criterion)))
 
-    fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, validation_criterion, scaler, device, args.model_file_path) 
+    fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, validation_criteria, None, device, args.model_file_path) 

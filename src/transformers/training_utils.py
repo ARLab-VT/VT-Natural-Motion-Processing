@@ -24,126 +24,19 @@ class Timer:
         self.end = time.time()
         self.interval = self.end - self.start
 
-def savePlot(points, epochs, filename):
-    points = np.array(points)
-    plt.figure()
-    fig, ax = plt.subplots()
-    x = range(1, epochs + 1)
-    plt.plot(x, points[:, 0], 'b-')
-    plt.plot(x, points[:, 1], 'r-')
-    plt.legend(['training loss', 'val loss'])
-    plt.savefig(filename)
 
-
-def plotLossesOverTime(losses_over_time):
-    losses_over_time = np.array(losses_over_time)
-    plt.figure()
-    fig, ax = plt.subplots()
-    plt.plot(losses_over_time)
-    plt.xlabel('frames')
-    plt.xticks(np.arange(1, 21))
-    plt.ylabel('scaled MAE loss')
-
-class MotionLoss(nn.Module):
-    def __init__(self, l_mae, l_angle, l_shape):
-        super(MotionLoss, self).__init__()
-        self.l_mae = l_mae
-        self.l_angle = l_angle
-        self.l_shape = l_shape
-
-    def maeLoss(self, prediction, target):
-        return F.l1_loss(prediction, target, reduction='mean')
- 
-    def angleLoss(self, prediction, target):
-        prediction = prediction.contiguous().view(-1, 4)
-        target = target.contiguous().view(-1, 4) 
-
-        R_targ = quat_to_rotMat(prediction)
-        R_pred = quat_to_rotMat(target)
-
-        R = R_pred.bmm(torch.transpose(R_targ, 1, 2))
-
-        loss = torch.mean(torch.abs(torch.log(F.relu(R.diagonal(dim1=-2, dim2=-1)) + 1e-8))) 
-
-        return loss
-    
-    def shapeBasedLoss(self, prediction, target):
-        prediction = torch.nn.functional.normalize(prediction, 0, 1)
-        target = torch.nn.functional.normalize(target, 0, 1)
-    
-        prediction = prediction.permute(1, 0, 2)
-        target = target.permute(1, 0, 2)
-    
-        prediction = prediction.unsqueeze(3)
-        target = target.unsqueeze(3)
-    
-        prediction = torch.cat((prediction, torch.zeros_like(prediction)), dim=3)
-        target = torch.cat((target, torch.zeros_like(target)), dim=3)
-    
-        pred_fft = torch.fft(prediction, 1)
-        targ_fft = torch.fft(target, 1)
-    
-        fft_mult_real = pred_fft[...,0]*targ_fft[...,0] + pred_fft[...,1]*targ_fft[...,1]
-        fft_mult_imag = pred_fft[...,1]*targ_fft[...,0] - pred_fft[...,0]*targ_fft[...,1]
-    
-        fft_mult = torch.cat((fft_mult_real.unsqueeze(3), fft_mult_imag.unsqueeze(3)), dim=3)
-    
-        cc = torch.ifft(fft_mult, 1)[...,0]
-    
-        pred_norm = torch.norm(prediction[...,0], dim=(1,2)).unsqueeze(1)
-        targ_norm = torch.norm(target[...,0], dim=(1,2)).unsqueeze(1)
-    
-        max_cc_norm, _ = torch.max(torch.sum(cc, 1) / (pred_norm * targ_norm), 1)
-    
-        loss = torch.abs(torch.mean(torch.ones_like(max_cc_norm, requires_grad=True) - max_cc_norm))
-    
-        return loss
-
-    def forward(self, prediction, target):        
-        mae = self.maeLoss(prediction, target)
-        angle = self.angleLoss(prediction, target)
-        shape = self.shapeBasedLoss(prediction, target)
-        
-        return self.l_mae*mae + self.l_angle*angle + self.l_shape*shape
-
-class ShapeLoss(nn.Module):
+class ExpmapToQuatLoss(nn.Module):
     def __init__(self):
-        super(ShapeLoss, self).__init__()
-    
-    def shapeBasedLoss(self, prediction, target):
-        prediction = torch.nn.functional.normalize(prediction, 0, 1)
-        target = torch.nn.functional.normalize(target, 0, 1)
-    
-        prediction = prediction.permute(1, 0, 2)
-        target = target.permute(1, 0, 2)
-    
-        prediction = prediction.unsqueeze(3)
-        target = target.unsqueeze(3)
-    
-        prediction = torch.cat((prediction, torch.zeros_like(prediction)), dim=3)
-        target = torch.cat((target, torch.zeros_like(target)), dim=3)
-    
-        pred_fft = torch.fft(prediction, 1)
-        targ_fft = torch.fft(target, 1)
-    
-        fft_mult_real = pred_fft[...,0]*targ_fft[...,0] + pred_fft[...,1]*targ_fft[...,1]
-        fft_mult_imag = pred_fft[...,1]*targ_fft[...,0] - pred_fft[...,0]*targ_fft[...,1]
-    
-        fft_mult = torch.cat((fft_mult_real.unsqueeze(3), fft_mult_imag.unsqueeze(3)), dim=3)
-    
-        cc = torch.ifft(fft_mult, 1)[...,0]
-    
-        pred_norm = torch.norm(prediction[...,0], dim=(1,2)).unsqueeze(1)
-        targ_norm = torch.norm(target[...,0], dim=(1,2)).unsqueeze(1)
-    
-        max_cc_norm, _ = torch.max(torch.sum(cc, 1) / (pred_norm * targ_norm), 1)
-    
-        loss = torch.abs(torch.mean(torch.ones_like(max_cc_norm, requires_grad=True) - max_cc_norm))
-    
-        return loss
+        super(ExpmapToQuatLoss, self).__init__()        
 
-    def forward(self, prediction, target): 
-        return self.shapeBasedLoss(prediction, target)
+    def forward(self, predictions, targets):
+        predictions = predictions.view(-1,3)
+        targets = targets.view(-1,3)
+
+        predictions = rotMat_to_quat(expmap_to_rotMat(predictions.double()))
+        targets = rotMat_to_quat(expmap_to_rotMat(targets.double()))
+
+        return F.l1_loss(predictions, targets)
 
 def train(model, optimizer, data, training_criterion, device):
     model.train()
@@ -157,7 +50,7 @@ def train(model, optimizer, data, training_criterion, device):
     
     loss.backward()
     
-    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+    #torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
     
     optimizer.step()
     optimizer.zero_grad()
@@ -183,9 +76,22 @@ def evaluate(model, data, validation_criterion, scaler, device):
                                                 torch.tensor(scaler.inverse_transform(target_i.cpu())))
         scaled_loss += scaled_loss_temp    
 
-    return loss.item(), scaled_loss / output.shape[1] 
+    return loss.item(), scaled_loss / output.shape[1]
 
-def fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, validation_criterion, scaler, device, model_file_path):
+def test(model, dataloader, criterion, device):
+    with torch.no_grad():
+        test_losses, scaled_test_losses = zip(
+            *[evaluate(model, data, criterion, None, device)
+                for _, data in enumerate(dataloader, 0)]
+        )
+ 
+    test_loss = np.sum(test_losses) / len(test_losses)
+
+    
+    logger.info("Test Loss: {}".format(str(test_loss)))
+
+
+def fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, validation_criteria, scaler, device, model_file_path):
     train_dataloader, val_dataloader = dataloaders
     total_time = 0
     min_val_loss = math.inf
@@ -204,21 +110,23 @@ def fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, va
                                                                                                                             str(len(train_dataloader)), 
                                                                                                                             str(loss),
                                                                                                                             str(optimizer.param_groups[0]['lr'])))
+        val_loss = []
+        for validation_criterion in validation_criteria:
+            with torch.no_grad():
+                val_losses, scaled_val_losses = zip(
+                    *[evaluate(model, data, validation_criterion, scaler, device)
+                      for _, data in enumerate(val_dataloader, 0)]
+                )
 
-        with torch.no_grad():
-            val_losses, scaled_val_losses = zip(
-                *[evaluate(model, data, validation_criterion, scaler, device)
-                  for _, data in enumerate(val_dataloader, 0)]
-            )
+            val_loss.append(np.sum(val_losses) / len(val_losses))
             
         loss = losses / len(train_dataloader)
-        val_loss = np.sum(val_losses) / len(val_losses)
         scaled_val_loss = np.sum(scaled_val_losses) / len(scaled_val_losses)
         scheduler.step()
-        logger.info("Epoch {} - Training Loss: {} - Val Loss: {} - Scaled Val Loss: {}".format(str(epoch+1), str(loss), str(val_loss), str(scaled_val_loss)))
+        logger.info("Epoch {} - Training Loss: {} - Val Loss: {} - Scaled Val Loss: {}".format(str(epoch+1), str(loss), ", ".join(map(str, val_loss)), str(scaled_val_loss)))
         
-        if val_loss < min_val_loss:
-            min_val_loss = val_loss
+        if val_loss[0] < min_val_loss:
+            min_val_loss = val_loss[0]
             logger.info("Saving model to {}".format(model_file_path))
             torch.save({
                 'model_state_dict': model.state_dict(),

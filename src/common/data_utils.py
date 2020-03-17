@@ -8,6 +8,7 @@ import os
 from .logging import *
 import sys
 from .conversions import *
+from torch.utils.data import TensorDataset, DataLoader
 
 class XSensDataIndices:
     def __init__(self):
@@ -18,10 +19,9 @@ class XSensDataIndices:
 
         segment_group = ['position', 'velocity', 'acceleration',
                          'angularVelocity', 'angularAcceleration',
-                         'orientation', 'smoothedOrientation', 'normOrientation', 
-                         'relativePosition']
+                         'orientation', 'normOrientation', 'normExpmapOrientation']
 
-        joint_group = ['jointAngle', 'jointAngleExpmap', 'jointAngleXZY']
+        joint_group = ['jointAngle', 'jointAngleXZY']
 
         joint_ergo_group = ['jointAngleErgo', 'jointAngleErgoXZY']
 
@@ -71,7 +71,7 @@ class XSensDataIndices:
             req_items = valid_items
 
         num_valid_items = len(valid_items)
-        dims = 4 if req_label in ['orientation', 'smoothedOrientation', 'normOrientation', 'normSensorOrientation'] else 3
+        dims = 4 if req_label in ['orientation', 'normOrientation', 'normSensorOrientation'] else 3
 
         indices = [list(range(i, i+dims))
                    for i in range(0, dims*num_valid_items, dims)]
@@ -92,75 +92,69 @@ class XSensDataIndices:
         return mapped_indices
 
 
-def add_relative_position(filepaths):
-    for filepath in filepaths:
-        h5_file = h5py.File(filepath, 'r+')
-
-        positions = np.array(h5_file['position'][:, :])
-        positions = positions.reshape(positions.shape[1], positions.shape[0])
-        pelvis = positions[:, :3]
-
-        relative_positions = positions - np.tile(pelvis, np.array(positions.shape) //
-                                                 np.array(pelvis.shape))
-        
-        relative_positions = relative_positions.reshape(relative_positions.shape[1], relative_positions.shape[0])
-
-        try: 
-            print("Writing to file {}".format(filepath))
-            h5_file.create_dataset('relativePosition', data=relative_positions)
-        except RuntimeError:
-            print("RuntimeError: Unable to create link (name already exists) in {}".format(
-                  filepath))
-        h5_file.close()
-
-
-def add_joint_angle_expmap(filepaths):
+def add_expmap_orientations(filepaths, group_name, new_group_name):
     for filepath in filepaths:
         try:
             h5_file = h5py.File(filepath, 'r+')
         except OSError:
             print("OSError: Unable to open file {}".format(filepath))
             continue
- 
-        joint_angles = np.array(h5_file['jointAngle'])
-        joint_angles = joint_angles.reshape(joint_angles.shape[1], joint_angles.shape[0])
-        
-        quat = euler_to_quaternion(joint_angles, 'zxy')
-        expmap = quaternion_to_expmap(quat)
-        expmap = expmap.reshape(expmap.shape[1], expmap.shape[0])
 
-        try:
+        quat = torch.Tensor(h5_file[group_name][:, :]) 
+        quat = quat.view(quat.shape[1], quat.shape[0])
+
+        old_shape = quat.shape
+        quat = quat.reshape(-1, 4)
+
+        expmap = quat_to_expmap(quat)
+        expmap = expmap.view(old_shape[0], old_shape[1]//4*3)
+        expmap = expmap.view(expmap.shape[1], expmap.shape[0])
+
+        try:    
             print("Writing to file {}".format(filepath))
-            h5_file.create_dataset('jointAngleExpmap', data=expmap)
+            h5_file.create_dataset(new_group_name, data=expmap)
         except RuntimeError:
             print("RuntimeError: Unable to create link (name already exists) in {}".format(
                   filepath))
         h5_file.close()
 
-def add_continuous_quaternions(filepaths, group_name, new_group_name):
+
+def add_normalized_accelerations(filepaths, new_group_name):
     for filepath in filepaths:
         try:
             h5_file = h5py.File(filepath, 'r+')
         except OSError:
             print("OSError: Unable to open file {}".format(filepath))
             continue
- 
-        quat = np.array(h5_file[group_name][:, :])
+
+        quat = np.array(h5_file['orientation'][:, :]) 
         quat = quat.reshape(quat.shape[1], quat.shape[0])
         quat = quat.reshape(quat.shape[0], -1, 4)
 
-        cont_quat = qfix(quat)
+        acc = np.array(h5_file['acceleration'][:, :])
+        acc = acc.reshape(acc.shape[1], acc.shape[0])
+        acc = acc.reshape(acc.shape([0], -1, 3))
 
-        cont_quat = cont_quat.reshape(cont_quat.shape[0], -1)
-        cont_quat = cont_quat.reshape(cont_quat.shape[1], cont_quat.shape[0])
-        
+        quat = qfix(quat)
+
+        norm_acc = np.zeros(acc.shape)
+
+        pelvis_rot = np.linalg.inv(quat_to_rotMat(torch.tensor(quat[:, 0, :])))
+        pelvis_acc = acc[:, 0, :]
+        for i in range(0, quat.shape[1]):
+            norm_acc[:, i, :] = np.matmul(pelvis_rot, acc[:, i, :] - pelvis_acc)
+
+        norm_acc = norm_acc.reshape(norm_acc.shape[0], -1) 
+        norm_acc = norm_acc.reshape(norm_acc.shape[1], norm_acc.shape[0])
+
         try:            
             print("Writing to file {}".format(filepath))
-            h5_file.create_dataset(new_group_name, data=cont_quat)
+            h5_file.create_dataset(new_group_name, data=norm_acc)
         except RuntimeError:
             print("RuntimeError: Unable to create link (name already exists) in {}".format(
                   filepath))
         h5_file.close()
+
 
 def add_normalized_quaternions(filepaths, group_name, new_group_name):
     for filepath in filepaths:
@@ -189,14 +183,33 @@ def add_normalized_quaternions(filepaths, group_name, new_group_name):
 
         try:            
             print("Writing to file {}".format(filepath))
-            #nquat = h5_file[new_group_name]
-            #nquat[...] = norm_quat
             h5_file.create_dataset(new_group_name, data=norm_quat)
         except RuntimeError:
             print("RuntimeError: Unable to create link (name already exists) in {}".format(
                   filepath))
         h5_file.close()
-        
+
+
+def qmul(q, r):
+    """
+    Multiply quaternion(s) q with quaternion(s) r.
+    Expects two equally-sized tensors of shape (*, 4), where * denotes any number of dimensions.
+    Returns q*r as a tensor of shape (*, 4).
+    """
+    assert q.shape[-1] == 4
+    assert r.shape[-1] == 4
+    
+    original_shape = q.shape
+    
+    # Compute outer product
+    terms = torch.bmm(r.view(-1, 4, 1), q.view(-1, 1, 4))
+
+    w = terms[:, 0, 0] - terms[:, 1, 1] - terms[:, 2, 2] - terms[:, 3, 3]
+    x = terms[:, 0, 1] + terms[:, 1, 0] - terms[:, 2, 3] + terms[:, 3, 2]
+    y = terms[:, 0, 2] + terms[:, 1, 3] + terms[:, 2, 0] - terms[:, 3, 1]
+    z = terms[:, 0, 3] - terms[:, 1, 2] + terms[:, 2, 1] + terms[:, 3, 0]
+    return torch.stack((w, x, y, z), dim=1).view(original_shape)
+
 
 def qfix(q):
     """
@@ -226,30 +239,6 @@ def discard_remainder(data, seq_length):
     data = data[:new_row_num]
     return data
 
-
-def pad_sequences(sequences, maxlen, start_char=False, padding='post'):
-    if start_char:
-        sequences = np.append(
-            np.ones((1, sequences.shape[1])), sequences, axis=0)
-
-    padded_sequences = np.zeros((maxlen, sequences.shape[1]))
-
-    if padding == 'post':
-        padded_sequences[:sequences.shape[0], :] = sequences
-    elif padding == 'pre':
-        offset = maxlen - sequences.shape[0]
-        padded_sequences[offset:, :] = sequences
-    return padded_sequences
-
-
-def split_sequences(data, seq_length, stride):
-    X, y = [], []
-    for i in range(0, data.shape[0] - 2*seq_length, stride):
-        X.append(data[i:i+seq_length, :])
-        y.append(data[i+seq_length:i+2*seq_length, :])
-    X = np.concatenate(X, axis=0)
-    y = np.concatenate(y, axis=0)
-    return X, y
 
 def stride_sequences(data, seq_length, stride, offset=0):
     output = []
@@ -300,6 +289,7 @@ def read_variables(h5_file_path, task, seq_length, stride):
             y_temp = stride_sequences(X_temp, seq_length, stride, offset=seq_length)
         elif task == 'conversion':
             y_temp = h5_file[filename]['Y']
+            y_temp = discard_remainder(y_temp, 2*seq_length)
             y_temp = stride_sequences(y_temp, seq_length, stride)
         else:
             logger.error("Task must be either prediction or conversion, found {}".format(task))
@@ -315,3 +305,29 @@ def read_variables(h5_file_path, task, seq_length, stride):
             y = torch.cat((y, torch.tensor(y_temp)), dim=0)
     h5_file.close()
     return X, y
+
+
+def load_dataloader(args, type): 
+    file_path = args.data_path + '/' + type + '.h5'
+    seq_length = int(args.seq_length)
+    batch_size = int(args.batch_size)
+    stride = int(args.stride) if type == 'training' else seq_length//2
+    
+
+    X, y = read_variables(file_path, args.task, seq_length, stride)
+
+    logger.info("Data for {} have shapes (X, y): {}, {}".format(type, X.shape, y.shape))
+
+    X = X.view(-1, seq_length, X.shape[1])
+    y = y.view(-1, seq_length, y.shape[1])
+
+    logger.info("Reshaped {} shapes (X, y): {}, {}".format(type, X.shape, y.shape))
+    
+    dataset = TensorDataset(X, y)
+    
+    shuffle = True if type == 'training' else False
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
+
+    logger.info("Number of {} samples: {}".format(type, len(dataset)))
+
+    return dataloader
