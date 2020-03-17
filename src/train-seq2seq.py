@@ -88,23 +88,15 @@ if __name__ == "__main__":
     X_val, y_val = read_variables(val_file_path, args.task, seq_length, stride)   
 
     scaler = None
-    y = reshape_to_sequences(y, seq_length)
-    y = np.flip(y, axis=1).copy() 
+    y = y.view(-1, seq_length, y.shape[1])
+    #y = np.flip(y, axis=1).copy() 
 
-    y_val = reshape_to_sequences(y_val, seq_length)
-    y_val = np.flip(y_val, axis=1).copy()    
+    y_val = y_val.view(-1, seq_length, y_val.shape[1])
+    #y_val = np.flip(y_val, axis=1).copy()    
 
-    X_scaler = StandardScaler().fit(np.append(X, X_val, axis=0))
-    X = X_scaler.transform(X)
-    X -= np.mean(X, axis=0)
-    X = reshape_to_sequences(X, seq_length)
+    X = X.view(-1, seq_length, X.shape[1])
 
-    X_val = X_scaler.transform(X_val)
-    X_val -= np.mean(X_val, axis=0)
-    X_val = reshape_to_sequences(X_val, seq_length)
-
-    X, y = torch.tensor(X), torch.tensor(y)
-    X_val, y_val = torch.tensor(X_val), torch.tensor(y_val)
+    X_val = X_val.view(-1, seq_length, X_val.shape[1])
 
     logger.info("Training shapes (X, y): {}, {}".format(X.shape, y.shape))
     logger.info("Validation shapes (X, y): {}, {}".format(X_val.shape, y_val.shape))    
@@ -118,7 +110,6 @@ if __name__ == "__main__":
 
     logger.info("Number of training samples: {}".format(len(train_dataset)))
     logger.info("Number of validation samples: {}".format(len(val_dataset)))
-    print(X.shape, y.shape, X_val.shape, y_val.shape)    
 
     train_dataset = TensorDataset(X, y)
     val_dataset = TensorDataset(X_val, y_val)
@@ -127,29 +118,31 @@ if __name__ == "__main__":
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
-    print("Number of training samples:", len(train_dataset))
-    print("Number of validation samples:", len(val_dataset))
+    encoder = get_encoder(encoder_feature_size,
+                          device,
+                          hidden_size=int(args.hidden_size),
+                          bidirectional=args.bidirectional)
 
-    encoder, encoder_optim = get_encoder(encoder_feature_size,
-                                         device,
-                                         lr=float(args.learning_rate),
-                                         hidden_size=int(args.hidden_size),
-                                         bidirectional=args.bidirectional)
+    encoder_optim = optim.AdamW(encoder.parameters(), lr=lr) 
 
     use_attention = False
     if args.attention in ['add', 'concat', 'general', 'activated-general', 'biased-general']:
-        decoder, decoder_optim = get_attn_decoder(decoder_feature_size,
-                                                  args.attention,
-                                                  device,
-                                                  hidden_size=int(args.hidden_size),
-                                                  lr=float(args.learning_rate),
-                                                  bidirectional_encoder=args.bidirectional)
+        decoder = get_attn_decoder(decoder_feature_size,
+                                   args.attention,
+                                   device,
+                                   hidden_size=int(args.hidden_size),
+                                   bidirectional_encoder=args.bidirectional)
         use_attention = True
     else:
-        decoder, decoder_optim = get_decoder(decoder_feature_size,
-                                             device,
-                                             lr=float(args.learning_rate),
-                                             hidden_size=int(args.hidden_size))
+        decoder = get_decoder(decoder_feature_size,
+                              device,
+                              hidden_size=int(args.hidden_size))
+
+    decoder_optim = optim.AdamW(decoder.parameters(), lr=lr) 
+
+    
+    encoder_params = sum(p.numel() for p in encoder.parameters() if p.requires_grad)    
+    decoder_params = sum(p.numel() for p in decoder.parameters() if p.requires_grad)
 
     models = (encoder, decoder)
     optims = (encoder_optim, decoder_optim)
@@ -157,12 +150,12 @@ if __name__ == "__main__":
     epochs = int(args.num_epochs)
     criterion = nn.L1Loss()
 
+    logger.info("Encoder for training: {}".format(str(encoder)))
+    logger.info("Decoder for training: {}".format(str(decoder)))
+    logger.info("Number of parameters: {}".format(str(encoder_params + decoder_params)))
+    logger.info("Optimizers for training: {}".format(str(encoder_optim)))
+    logger.info("Criterion for training: {}".format(str(criterion)))
+
     fit(models, optims, epochs, dataloaders, criterion,
-        scaler, device, use_attention=use_attention)
+        scaler, device, args.model_file_path, use_attention=use_attention)
     
-    torch.save({
-        'encoder_state_dict': encoder.state_dict(),
-        'decoder_state_dict': decoder.state_dict(),
-        'optimizerA_state_dict': encoder_optim.state_dict(),
-        'optimizerB_state_dict': decoder_optim.state_dict(),
-    }, args.model_file_path)

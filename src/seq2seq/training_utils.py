@@ -24,65 +24,24 @@ class Timer:
         self.interval = self.end - self.start
 
 
-class ProgressBar:
-    def __init__(self, size, step_size):
-        self.size = size
-        self.step_size = step_size
-
-    def print_progress_bar(self, index, total_time, loss):
-        amount_complete = math.floor(
-            (index + 1) / self.size * 30)
-        amount_incomplete = (30 - amount_complete)
-        progress_bar = "[" + amount_complete * \
-            "=" + amount_incomplete * "-" + "]"
-
-        print("\r%d/%d" % (self.step_size * (index + 1), self.step_size * self.size),
-              progress_bar,
-              "- Time elapsed: %.2fs" % total_time,
-              "- Loss: %.8f" % loss,
-              end=""
-              )
-
-
-def get_encoder(num_features, device, hidden_size=64, lr=0.001, dropout=0.0, bs=32, bidirectional=False):
+def get_encoder(num_features, device, hidden_size=64, dropout=0.0, bs=32, bidirectional=False):
     encoder = EncoderRNN(num_features, hidden_size, bs,
                          dropout=dropout, bidirectional=bidirectional).to(device)
-    return encoder, optim.Adam(encoder.parameters(), lr=lr)
+    return encoder
 
 
-def get_decoder(num_features, device, hidden_size=64, lr=0.001, dropout=0.0, bs=32):
+def get_decoder(num_features, device, hidden_size=64, dropout=0.0, bs=32):
     decoder = DecoderRNN(num_features, hidden_size,
                          num_features, bs, dropout=dropout).to(device)
-    return decoder, optim.Adam(decoder.parameters(), lr=lr)
+    return decoder
 
 
-def get_attn_decoder(num_features, method, device, hidden_size=64, lr=0.001, bs=32, bidirectional_encoder=False):
+def get_attn_decoder(num_features, method, device, hidden_size=64, bs=32, bidirectional_encoder=False):
     attn = Attention(hidden_size, bs, method,
                      bidirectional_encoder=bidirectional_encoder)
     decoder = AttnDecoderRNN(num_features, num_features, hidden_size, hidden_size,
                              attn, bidirectional_encoder=bidirectional_encoder).to(device)
-    return decoder, optim.Adam(decoder.parameters(), lr=lr)
-
-
-def savePlot(points, epochs, filename):
-    points = np.array(points)
-    plt.figure()
-    fig, ax = plt.subplots()
-    x = range(1, epochs + 1)
-    plt.plot(x, points[:, 0], 'b-')
-    plt.plot(x, points[:, 1], 'r-')
-    plt.legend(['training loss', 'val loss'])
-    plt.savefig(filename)
-
-
-def plotLossesOverTime(losses_over_time):
-    losses_over_time = np.array(losses_over_time)
-    plt.figure()
-    fig, ax = plt.subplots()
-    plt.plot(losses_over_time)
-    plt.xlabel('frames')
-    plt.xticks(np.arange(1, 21))
-    plt.ylabel('scaled MAE loss')
+    return decoder
 
 
 def loss_batch(data, models, opts, criterion, device, scaler=None, teacher_forcing_ratio=0.0, use_attention=False):
@@ -146,12 +105,10 @@ def loss_batch(data, models, opts, criterion, device, scaler=None, teacher_forci
     return loss.item() / seq_length
 
 
-def fit(models, optims, epochs, dataloaders, criterion, scaler, device,
+def fit(models, optims, epochs, dataloaders, criterion, scaler, device, model_file_path,
         teacher_forcing_ratio=0.0,
-        update_learning_rates=None,
         use_attention=False,
-        schedule_rate=1.0,
-        fig_filename='training_plot.png'):
+        schedule_rate=1.0):
 
     train_dataloader, val_dataloader = dataloaders
 
@@ -159,12 +116,10 @@ def fit(models, optims, epochs, dataloaders, criterion, scaler, device,
     batch_size = len(train_dataloader.dataset[0])
 
     plot_losses = []
+    min_val_loss = math.inf
     for epoch in range(epochs):
         losses = []
         total_time = 0
-
-        if update_learning_rates is not None:
-            optims = update_learning_rates(optims, epoch)
 
         logger.info("Epoch {} / {}".format(str(epoch+1), str(epochs)))
 
@@ -191,10 +146,16 @@ def fit(models, optims, epochs, dataloaders, criterion, scaler, device,
 
         plot_losses.append((loss, val_loss))
 
-        print()
         logger.info("Training Loss: {} - Val Loss: {}".format(str(loss), str(val_loss)))
 
         teacher_forcing_ratio *= schedule_rate
+        if val_loss < min_val_loss:
+            min_val_loss = val_loss
+            logger.info("Saving model to {}".format(model_file_path))
+            torch.save({
+                'encoder_state_dict': models[0].state_dict(),
+                'decoder_state_dict': models[1].state_dict(),
+                'optimizerA_state_dict': optims[0].state_dict(),
+                'optimizerB_state_dict': optims[1].state_dict(),
+            }, model_file_path)
 
-    savePlot(plot_losses, epochs, fig_filename)
-    plotLossesOverTime(scaled_val_loss_over_time)

@@ -91,11 +91,7 @@ class AttnDecoderRNN(nn.Module):
 
         output, hidden = self.rnn(rnn_input, hidden)
 
-        # seq len, n layers and n directions will always be 1 in this decoder, therefore:
-        # output = [1, batch size, dec hid dim]
-        # hidden = [1, batch size, dec hid dim]
-        # this also means that output == hidden
-        assert (output == hidden).all()
+        assert torch.all(torch.isclose(output, hidden))
 
         input = input.squeeze(0)
         output = output.squeeze(0)
@@ -105,7 +101,7 @@ class AttnDecoderRNN(nn.Module):
 
         # output = [batch_size, output_dim]
 
-        return output.unsqueeze(0) + input, hidden
+        return output.unsqueeze(0), hidden
 
 
 class Attention(nn.Module):
