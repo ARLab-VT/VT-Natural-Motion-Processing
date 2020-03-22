@@ -187,6 +187,19 @@ class Attention(nn.Module):
 
             return score
 
+        elif self.method == 'dot':
+            hidden = hidden.unsqueeze(-1)
+            
+            score = annotations.bmm(hidden)
+            
+            assert list(score.shape) == [self.batch_size,
+                                         self.seq_len,
+                                         1]
+            
+            score = score.squeeze(-1)
+
+            return score
+
         elif self.method == 'add':
             x1 = self.Wa(annotations)
 

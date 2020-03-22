@@ -126,7 +126,7 @@ if __name__ == "__main__":
     encoder_optim = optim.AdamW(encoder.parameters(), lr=lr) 
 
     use_attention = False
-    if args.attention in ['add', 'concat', 'general', 'activated-general', 'biased-general']:
+    if args.attention in ['add', 'dot', 'concat', 'general', 'activated-general', 'biased-general']:
         decoder = get_attn_decoder(decoder_feature_size,
                                    args.attention,
                                    device,
