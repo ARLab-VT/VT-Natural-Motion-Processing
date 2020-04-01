@@ -21,48 +21,6 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:x.size(0), :]
         return self.dropout(x)
 
-
-class MotionTransformer(nn.Module):    
-    def __init__(self, num_input_features, num_heads, dim_feedforward, dropout, num_layers, num_output_features, representation='quaternions'): 
-        super(MotionTransformer, self).__init__()
-        self.pos_encoder = PositionalEncoding(num_input_features, dropout)
-        self.encoder_layer = nn.TransformerEncoderLayer(num_input_features, 
-                                                        num_heads,
-                                                        dim_feedforward=dim_feedforward,
-                                                        dropout=dropout)
-        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers, norm=None)
-        self.decoder = nn.Linear(num_input_features, num_output_features)
-        self.representation = representation
-    
-    def init_weights(self):
-        initrange = 0.1
-        self.decoder.bias.data.zero_()
-        self.decoder.weight.data.uniform_(-initrange, initrange)
-
-    def forward(self, src):
-        pos_enc = self.pos_encoder(src)
-        enc_output = self.encoder(pos_enc)
-        velocities = self.decoder(enc_output)
-
-        last_pose = src[-1, :, :]
-        output = torch.zeros_like(velocities).to(src.device)
-
-        for i in range(velocities.shape[0]):
-            new_pose = last_pose + velocities[i,:,:]
-            
-            if self.representation == 'quaternions':
-                original_shape = new_pose.shape
-
-                new_pose = new_pose.view(-1,4)
-                new_pose = F.normalize(new_pose, p=2, dim=1).view(original_shape)
-            
-            output[i, :, :] = new_pose
-            
-            last_pose = new_pose    
-
-        return output
-
-
 class InferenceTransformerEncoder(nn.Module):    
     def __init__(self, num_input_features, num_heads, dim_feedforward, dropout, num_layers, num_output_features, quaternions=False): 
         super(InferenceTransformerEncoder, self).__init__()
