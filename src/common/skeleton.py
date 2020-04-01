@@ -91,21 +91,24 @@ class Skeleton:
 
         plt.show()
 
-    def visualize_motion(self, orientations):
+    def visualize_motion(self, orientations, continuous=False):
         if len(orientations.shape) == 1:
             orientations = orientations.unsqueeze(0)       
  
-        def update_lines(num, dataLines, lines):
+        def update_lines(num, data, lines):
             positions = data[num]
-    
+                
             for i, line in enumerate(lines):
                 xs = list(positions[self.skeleton_tree[i], 0])
                 ys = list(positions[self.skeleton_tree[i], 1])
                 zs = list(positions[self.skeleton_tree[i], 2])
-    
+                
                 line.set_data(xs, ys)
                 line.set_3d_properties(zs)
-    
+                if continuous and (num % orientations.shape[0]) > orientations.shape[0]//2:
+                    line.set_linestyle('--')
+                else:
+                    line.set_linestyle('-')
             return lines
 
         # Attaching 3D axis to the figure
@@ -128,9 +131,17 @@ class Skeleton:
 
         ax.set_title('3D Test')
 
+        # Hide grid lines
+        ax.grid(False)
+
+        # Hide axes ticks
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_zticks([])
+
         # Creating the Animation object
         line_ani = animation.FuncAnimation(fig, update_lines, frames=range(data.shape[0]), fargs=(data, lines),
-										   interval=4, blit=True)
+										   interval=25, blit=True)
 
         plt.show()
         return line_ani
