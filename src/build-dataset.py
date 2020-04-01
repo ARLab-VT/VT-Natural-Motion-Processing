@@ -43,6 +43,11 @@ def parse_args():
     parser.add_argument('--output-label-request',
                         help='output label requests, space separated; e.g., "all" or "jRightElbow"')
     
+    parser.add_argument('--aux-task-output',
+                        help='auxiliary task output in addition to regular task output')
+ 
+    parser.add_argument('--aux-output-label-request',
+                        help='aux output label requests, space separated')    
 
     args = parser.parse_args()
 
@@ -52,12 +57,12 @@ def parse_args():
         sys.exit()
 
     if args.data_path is None or args.output_path is None:
-        logger.info("Data path or output path were not provided.")
+        logger.error("Data path or output path were not provided.")
         parser.print_help()
         sys.exit()
 
     if args.task_input is None or args.input_label_request is None or args.task_output is None:
-        logger.info("Task input and label requests or task output were not given.")
+        logger.error("Task input and label requests or task output were not given.")
         parser.print_help()
         sys.exit()
 
@@ -68,6 +73,16 @@ def parse_args():
             logger.error("Label output requests were not given for the task.")
             parser.print_help()
             sys.exit()
+
+    if args.aux_task_output == args.task_output:
+        logger.error("Auxiliary task should not be the same as the main task.")
+        parser.print_help()
+        sys.exit()
+
+    if args.aux_task_output is not None and args.aux_output_label_request is None:
+        logger.error("Need auxiliary output labels if using aux output task")
+        parser.print_help()
+        sys.exit()
     
     if args.task_input == args.task_output:
         if args.output_label_request is None:
@@ -129,11 +144,18 @@ if __name__ == "__main__":
         requests = map_requests(task_input, input_label_request)
 
         write_dataset(filepath_groups, "X", experiment_setup, requests)
-    else:
-        experiment_setup = {"X" : args.task_input.split(" "), "Y" : args.task_output.split(" ")}
+    else:      
+        experiment_setup = {"X" : task_input, "Y" : task_output}
 
         input_requests = map_requests(task_input, input_label_request)
         output_requests = map_requests(task_output, output_label_request)
+
+        if args.aux_task_output is not None:
+            aux_task_output = args.aux_task_output.split(" ")
+            aux_output_label_request = args.aux_output_label_request.split(" ")
+            experiment_setup["Y"] += aux_task_output
+            aux_output_requests = map_requests(aux_task_output, aux_output_label_request)
+            output_requests.update(aux_output_requests)
         
         write_dataset(filepath_groups, "X", experiment_setup, input_requests)
         write_dataset(filepath_groups, "Y", experiment_setup, output_requests)         
