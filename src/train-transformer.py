@@ -36,20 +36,24 @@ def parse_args():
                         help='path to h5 files containing data (must contain training.h5 and validation.h5)')
     parser.add_argument('--representation',
                         help='data representation (quaternions, expmap, rotmat)', default='quaternions')
+    parser.add_argument('--full-transformer',
+                        help='will use Transformer with both encoder and decoder if true, will only use encoder if false', default=False, action='store_true')
     parser.add_argument('--model-file-path',
                         help='path to model file for saving it after training')
     parser.add_argument('--batch-size',
                         help='batch size for training', default=32)
     parser.add_argument('--learning-rate',
-	                    help='initial learning rate for training', default=0.001)
+                        help='initial learning rate for training', default=0.001)
     parser.add_argument('--beta-one',
-	                    help='beta1 for adam optimizer (momentum)', default=0.9)
+                        help='beta1 for adam optimizer (momentum)', default=0.9)
     parser.add_argument('--beta-two',
-	                    help='beta2 for adam optimizer', default=0.999)
+                        help='beta2 for adam optimizer', default=0.999)
     parser.add_argument('--seq-length',
-                        help='sequence length for encoder/decoder', default=20)
+                        help='sequence length for model, will be downsampled if downsample is provided', default=20)
+    parser.add_argument('--downsample',
+                        help='reduce sampling frequency of recorded data; default sampling frequency is 240 Hz', default=1)
     parser.add_argument('--stride',
-                        help='stride used when running prediction tasks', default=3)
+                        help='stride used when reading data in for running prediction tasks', default=3)
     parser.add_argument('--num-epochs',
                         help='number of epochs for training', default=1)
     parser.add_argument('--num-heads',
@@ -81,11 +85,12 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Training on {}...".format(device))    
-    seq_length = int(args.seq_length)
+    seq_length = int(args.seq_length)//int(args.downsample)
     lr = float(args.learning_rate)
-    
-    train_dataloader = load_dataloader(args, "training")
-    val_dataloader = load_dataloader(args, "validation")
+
+    normalize = True    
+    train_dataloader, norm_data = load_dataloader(args, "training", normalize)
+    val_dataloader, _ = load_dataloader(args, "validation", normalize, norm_data=norm_data)
  
     encoder_feature_size = train_dataloader.dataset[0][0].shape[1]
     decoder_feature_size = train_dataloader.dataset[0][1].shape[1]
@@ -95,24 +100,26 @@ if __name__ == "__main__":
     dropout = float(args.dropout)
     num_layers = int(args.num_layers)
 
-    if args.task == 'prediction':
-        model = MotionTransformer(encoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size, representation=args.representation)
+   
+    if args.full_transformer:
+        model = InferenceTransformer(decoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size, quaternions=True)
     else:
-        model = ConversionTransformer(encoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size)    
+        model = InferenceTransformerEncoder(encoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size, quaternions=True)    
     
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)    
 
     if torch.cuda.device_count() > 1:
         model = nn.DataParallel(model)
 
-    model = model.to(device).float()
+    model = model.to(device).double()
 
     epochs = int(args.num_epochs)
     beta1 = float(args.beta_one)
     beta2 = float(args.beta_two)
 
-    optimizer = optim.AdamW(model.parameters(), lr=lr, betas=(beta1, beta2)) 
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[2,4,6], gamma=0.1)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, betas=(beta1, beta2), weight_decay=0.03) 
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[1,3], gamma=0.1)
+
     dataloaders = (train_dataloader, val_dataloader)
     training_criterion = nn.L1Loss()
     validation_criteria = [nn.L1Loss()]
@@ -125,4 +132,7 @@ if __name__ == "__main__":
     logger.info("Optimizer for training: {}".format(str(optimizer)))
     logger.info("Criterion for training: {}".format(str(training_criterion)))
 
-    fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, validation_criteria, None, device, args.model_file_path) 
+    fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, validation_criteria, device, args.model_file_path, full_transformer=args.full_transformer) 
+
+    logger.info("Completed Training...")
+    logger.info("\n")

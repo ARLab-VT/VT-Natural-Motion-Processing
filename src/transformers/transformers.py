@@ -21,56 +21,18 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:x.size(0), :]
         return self.dropout(x)
 
-class MotionTransformerEncoderLayer(nn.Module):
-    """
-    Custom TransformerEncoderLayer for training of motion data. This layer does not contain
-    the linear layer found the original Transformer model.
-    Args:
-        d_model: the number of expected features in the input (required).
-        nhead: the number of heads in the multiheadattention models (required).
-        dropout: the dropout value (default=0.1).
-    """
-
-    def __init__(self, d_model, nhead, dropout=0.1):
-        super(MotionTransformerEncoderLayer, self).__init__()
-        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
-        # Implementation of Feedforward model
-        self.norm1 = nn.LayerNorm(d_model)
-        self.dropout1 = nn.Dropout(dropout)
-
-    def forward(self, src, src_mask=None, src_key_padding_mask=None):
-        """Pass the input through the encoder layer.
-
-        Args:
-            src: the sequnce to the encoder layer (required).
-            src_mask: the mask for the src sequence (optional).
-            src_key_padding_mask: the mask for the src keys per batch (optional).
-
-        Shape:
-            see the docs in Transformer class.
-        """
-        src2 = self.self_attn(src, src, src, attn_mask=src_mask,
-                              key_padding_mask=src_key_padding_mask)[0]
-        src = src + self.dropout1(src2)
-        src = self.norm1(src)
-        return src
 
 class MotionTransformer(nn.Module):    
     def __init__(self, num_input_features, num_heads, dim_feedforward, dropout, num_layers, num_output_features, representation='quaternions'): 
         super(MotionTransformer, self).__init__()
         self.pos_encoder = PositionalEncoding(num_input_features, dropout)
-        self.encoder_layer = MotionTransformerEncoderLayer(num_input_features, 
+        self.encoder_layer = nn.TransformerEncoderLayer(num_input_features, 
                                                         num_heads,
+                                                        dim_feedforward=dim_feedforward,
                                                         dropout=dropout)
         self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers, norm=None)
         self.decoder = nn.Linear(num_input_features, num_output_features)
-        self.src_mask = None
         self.representation = representation
-    
-    def _generate_square_subsequent_mask(self, sz):
-        mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
-        mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
-        return mask
     
     def init_weights(self):
         initrange = 0.1
@@ -78,12 +40,8 @@ class MotionTransformer(nn.Module):
         self.decoder.weight.data.uniform_(-initrange, initrange)
 
     def forward(self, src):
-        if self.src_mask is None or self.src_mask.size(0) != len(src):
-            device = src.device
-            mask = self._generate_square_subsequent_mask(len(src)).to(device)
-            self.src_mask = mask
         pos_enc = self.pos_encoder(src)
-        enc_output = self.encoder(pos_enc, self.src_mask)
+        enc_output = self.encoder(pos_enc)
         velocities = self.decoder(enc_output)
 
         last_pose = src[-1, :, :]
@@ -91,7 +49,7 @@ class MotionTransformer(nn.Module):
 
         for i in range(velocities.shape[0]):
             new_pose = last_pose + velocities[i,:,:]
-
+            
             if self.representation == 'quaternions':
                 original_shape = new_pose.shape
 
@@ -105,21 +63,54 @@ class MotionTransformer(nn.Module):
         return output
 
 
-class ConversionTransformer(nn.Module):    
-    def __init__(self, num_input_features, num_heads, dim_feedforward, dropout, num_layers, num_output_features): 
-        super(ConversionTransformer, self).__init__()
+class InferenceTransformerEncoder(nn.Module):    
+    def __init__(self, num_input_features, num_heads, dim_feedforward, dropout, num_layers, num_output_features, quaternions=False): 
+        super(InferenceTransformerEncoder, self).__init__()
         self.pos_encoder = PositionalEncoding(num_input_features, dropout)
         self.encoder_layer = nn.TransformerEncoderLayer(num_input_features, 
                                                         num_heads,
                                                         dim_feedforward=dim_feedforward,
                                                         dropout=dropout)
         self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers, norm=None)
-        self.decoder = nn.Linear(num_input_features, num_output_features)
-        self.src_mask = None
-    
-    def _generate_square_subsequent_mask(self, sz):
-        mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
-        mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+        self.linear1 = nn.Linear(num_input_features, dim_feedforward)
+        self.linear2 = nn.Linear(dim_feedforward, num_output_features)
+        self.quaternions = quaternions
+
+    def forward(self, src):
+        pos_enc = self.pos_encoder(src)
+        enc_output = self.encoder(pos_enc)
+        output = self.linear2(self.linear1(enc_output))
+
+        if self.quaternions:
+            original_shape = output.shape
+
+            output = output.view(-1,4)
+            output = F.normalize(output, p=2, dim=1).view(original_shape)
+
+        return output
+
+
+class InferenceTransformer(nn.Module):    
+    def __init__(self, num_input_features, num_heads, dim_feedforward, dropout, num_layers, num_output_features, quaternions=False): 
+        super(InferenceTransformer, self).__init__()
+        self.pos_encoder = PositionalEncoding(num_input_features, dropout)
+        self.pos_decoder = PositionalEncoding(num_output_features, dropout)
+        self.encoder_layer = nn.TransformerEncoderLayer(num_input_features, 
+                                                        num_heads,
+                                                        dim_feedforward=dim_feedforward,
+                                                        dropout=dropout)
+        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers, norm=None)
+        self.decoder_layer = nn.TransformerDecoderLayer(num_input_features,
+                                                  num_heads,
+                                                  dim_feedforward=dim_feedforward,
+                                                  dropout=dropout)
+        self.decoder = nn.TransformerDecoder(self.decoder_layer, num_layers, norm=None)
+        self.tgt_mask = None
+        self.quaternions = quaternions
+
+    def generate_square_subsequent_mask(self, sz):
+        mask = torch.triu(torch.ones(sz, sz), 1)
+        mask = mask.masked_fill(mask==1, float('-inf'))
         return mask
     
     def init_weights(self):
@@ -127,12 +118,18 @@ class ConversionTransformer(nn.Module):
         self.decoder.bias.data.zero_()
         self.decoder.weight.data.uniform_(-initrange, initrange)
 
-    def forward(self, src):
-        if self.src_mask is None or self.src_mask.size(0) != len(src):
-            device = src.device
-            mask = self._generate_square_subsequent_mask(len(src)).to(device)
-            self.src_mask = mask
-        pos_enc = self.pos_encoder(src)
-        output = self.encoder(pos_enc, self.src_mask)
-        output = self.decoder(output)
+    def forward(self, src, target):
+        if self.tgt_mask is None or self.tgt_mask.size(0) != len(target):
+            self.tgt_mask = self.generate_square_subsequent_mask(len(target)).to(target.device)
+
+        pos_enc = self.pos_decoder(src)
+        memory = self.encoder(pos_enc)
+
+        pos_dec = self.pos_decoder(target)
+        output = self.decoder(target, memory, tgt_mask=self.tgt_mask)
+        
+        if self.quaternions:
+            original_shape = output.shape
+            output = F.normalize(output.view(-1,4), p=2, dim=1).view(original_shape)
+
         return output

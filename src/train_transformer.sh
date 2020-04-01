@@ -1,15 +1,17 @@
-python train-transformer.py --task conversion \
-                        --data-path /groups/MotionPred/forearm-sternum-to-upperarm-2 \
+python train-transformer.py --task prediction \
+                        --data-path /groups/MotionPred/motion-inference/full-set-1 \
                         --representation quaternions \
-                        --model-file-path ./models/inference-model.pt \
-                        --batch-size=16 \
+                        --full-transformer \
+                        --model-file-path ./models/motion-prediction/full-transformer-model-full-set.pt \
+                        --batch-size=32 \
                         --seq-length=160 \
-                        --stride=20 \
-                        --learning-rate=0.001 \
-                        --beta-one=0.9 \
+                        --downsample=6 \
+                        --stride=160 \
+                        --learning-rate=0.0001 \
+                        --beta-one=0.95 \
                         --beta-two=0.999 \
-                        --num-epochs=8 \
-                        --num-heads=2 \
-                        --dim-feedforward=16 \
-                        --dropout=0.1 \
-                        --num-layers=12
+                        --num-epochs=5 \
+                        --num-heads=4 \
+                        --dim-feedforward=2056 \
+                        --dropout=0.0 \
+                        --num-layers=2
