@@ -6,11 +6,10 @@ import torch.nn.functional as F
 
 
 class EncoderRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, batch_size, dropout=0.0, bidirectional=False):
+    def __init__(self, input_size, hidden_size, dropout=0.0, bidirectional=False):
         super(EncoderRNN, self).__init__()
 
         self.hidden_size = hidden_size
-        self.batch_size = batch_size
         self.bidirectional = bidirectional
 
         self.gru = nn.GRU(input_size, hidden_size, bidirectional=bidirectional)
@@ -31,10 +30,9 @@ class EncoderRNN(nn.Module):
 
 
 class DecoderRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, batch_size, dropout=0.0):
+    def __init__(self, input_size, hidden_size, output_size, dropout=0.0):
         super(DecoderRNN, self).__init__()
         self.hidden_size = hidden_size
-        self.batch_size = batch_size
 
         self.gru = nn.GRU(input_size, hidden_size)
         self.dropout = nn.Dropout(dropout)
@@ -47,7 +45,7 @@ class DecoderRNN(nn.Module):
         return output + input, hidden
 
     def initHidden(self):
-        return torch.zeros(1, self.batch_size, self.hidden_size, device=device)
+        return torch.zeros(1, 1, self.hidden_size, device=device)
 
 
 class AttnDecoderRNN(nn.Module):
@@ -91,7 +89,7 @@ class AttnDecoderRNN(nn.Module):
 
         output, hidden = self.rnn(rnn_input, hidden)
 
-        assert torch.all(torch.isclose(output, hidden))
+        # assert torch.all(torch.isclose(output, hidden))
 
         input = input.squeeze(0)
         output = output.squeeze(0)
@@ -101,7 +99,7 @@ class AttnDecoderRNN(nn.Module):
 
         # output = [batch_size, output_dim]
 
-        return output.unsqueeze(0), hidden
+        return output.unsqueeze(0), hidden    
 
 
 class Attention(nn.Module):
@@ -188,14 +186,16 @@ class Attention(nn.Module):
             return score
 
         elif self.method == 'dot':
-            hidden = hidden.unsqueeze(-1)
+            hidden = hidden.unsqueeze(-1)     
+            
+            hidden = hidden.repeat(1, self.directions, 1)
             
             score = annotations.bmm(hidden)
             
             assert list(score.shape) == [self.batch_size,
                                          self.seq_len,
                                          1]
-            
+           
             score = score.squeeze(-1)
 
             return score
