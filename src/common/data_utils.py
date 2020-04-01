@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import warnings
 import h5py
+import math
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import RobustScaler
 import os
@@ -15,9 +16,10 @@ class XSensDataIndices:
         sensor_group = ['sensorFreeAcceleration',
                         'sensorMagneticField',
                         'sensorOrientation',
-                        'normSensorOrientation']
+                        'normSensorOrientation',
+                        'normSensorAcceleration']
 
-        segment_group = ['position', 'velocity', 'acceleration',
+        segment_group = ['position', 'normPositions', 'velocity', 'acceleration', 'normAcceleration',
                          'angularVelocity', 'angularAcceleration',
                          'orientation', 'normOrientation', 'normExpmapOrientation']
 
@@ -119,6 +121,43 @@ def add_expmap_orientations(filepaths, group_name, new_group_name):
         h5_file.close()
 
 
+def add_normalized_positions(filepaths, new_group_name):
+    for filepath in filepaths:
+        try:
+            h5_file = h5py.File(filepath, 'r+')
+        except OSError:
+            print("OSError: Unable to open file {}".format(filepath))
+            continue
+
+        quat = np.array(h5_file['orientation'][:, :]) 
+        quat = quat.reshape(quat.shape[1], quat.shape[0])
+        quat = quat.reshape(quat.shape[0], -1, 4)
+
+        pos = np.array(h5_file['position'][:, :])
+        pos = pos.reshape(pos.shape[1], pos.shape[0])
+        pos = pos.reshape(pos.shape[0], -1, 3)
+
+        quat = qfix(quat)
+
+        norm_pos = np.zeros(pos.shape)
+
+        pelvis_rot = np.linalg.inv(quat_to_rotMat(torch.tensor(quat[:, 0, :])))
+        pelvis_pos = pos[:, 0, :]
+        for i in range(0, quat.shape[1]):
+            relative_pos = np.expand_dims(pos[:, i, :] - pelvis_pos, axis=2)
+            norm_pos[:, i, :] = np.squeeze(np.matmul(pelvis_rot, relative_pos), axis=2)
+
+        norm_pos = norm_pos.reshape(norm_pos.shape[0], -1) 
+        norm_pos = norm_pos.reshape(norm_pos.shape[1], norm_pos.shape[0])
+
+        try:            
+            print("Writing to file {}".format(filepath))
+            h5_file.create_dataset(new_group_name, data=norm_pos)
+        except RuntimeError:
+            print("RuntimeError: Unable to create link (name already exists) in {}".format(
+                  filepath))
+        h5_file.close()
+
 def add_normalized_accelerations(filepaths, new_group_name):
     for filepath in filepaths:
         try:
@@ -133,7 +172,7 @@ def add_normalized_accelerations(filepaths, new_group_name):
 
         acc = np.array(h5_file['acceleration'][:, :])
         acc = acc.reshape(acc.shape[1], acc.shape[0])
-        acc = acc.reshape(acc.shape([0], -1, 3))
+        acc = acc.reshape(acc.shape[0], -1, 3)
 
         quat = qfix(quat)
 
@@ -141,8 +180,9 @@ def add_normalized_accelerations(filepaths, new_group_name):
 
         pelvis_rot = np.linalg.inv(quat_to_rotMat(torch.tensor(quat[:, 0, :])))
         pelvis_acc = acc[:, 0, :]
-        for i in range(0, quat.shape[1]):
-            norm_acc[:, i, :] = np.matmul(pelvis_rot, acc[:, i, :] - pelvis_acc)
+        for i in range(0, acc.shape[1]):
+            relative_acc = np.expand_dims(acc[:, i, :] - pelvis_acc, axis=2)
+            norm_acc[:, i, :] = np.squeeze(np.matmul(pelvis_rot, relative_acc), axis=2)
 
         norm_acc = norm_acc.reshape(norm_acc.shape[0], -1) 
         norm_acc = norm_acc.reshape(norm_acc.shape[1], norm_acc.shape[0])
@@ -240,10 +280,10 @@ def discard_remainder(data, seq_length):
     return data
 
 
-def stride_sequences(data, seq_length, stride, offset=0):
+def stride_downsample_sequences(data, seq_length, stride, downsample, offset=0):
     output = []
     for i in range(0, data.shape[0] - 2*seq_length, stride):
-        output.append(data[i+offset:i+seq_length+offset, :])
+        output.append(data[i+offset:i+seq_length+offset:downsample, :])
     output = np.concatenate(output, axis=0)
     return output
 
@@ -278,7 +318,7 @@ def read_h5(filepaths, requests):
     return dataset
 
 
-def read_variables(h5_file_path, task, seq_length, stride):
+def read_variables(h5_file_path, task, seq_length, stride, downsample):
     X, y = None, None
     h5_file = h5py.File(h5_file_path, 'r')
     for filename in h5_file.keys():
@@ -286,16 +326,19 @@ def read_variables(h5_file_path, task, seq_length, stride):
         X_temp = discard_remainder(X_temp, 2*seq_length)
 
         if task == 'prediction':
-            y_temp = stride_sequences(X_temp, seq_length, stride, offset=seq_length)
+            y_temp = stride_downsample_sequences(X_temp, seq_length, stride, downsample, offset=seq_length)
         elif task == 'conversion':
             y_temp = h5_file[filename]['Y']
             y_temp = discard_remainder(y_temp, 2*seq_length)
-            y_temp = stride_sequences(y_temp, seq_length, stride)
+            y_temp = stride_downsample_sequences(y_temp, seq_length, stride, downsample)
         else:
             logger.error("Task must be either prediction or conversion, found {}".format(task))
             sys.exit()
 
-        X_temp = stride_sequences(X_temp, seq_length, stride)
+        X_temp = stride_downsample_sequences(X_temp, seq_length, stride, downsample)
+        
+        assert not np.any(np.isnan(X_temp))
+        assert not np.any(np.isnan(y_temp))
         
         if X is None and y is None:
             X = torch.tensor(X_temp)
@@ -307,27 +350,40 @@ def read_variables(h5_file_path, task, seq_length, stride):
     return X, y
 
 
-def load_dataloader(args, type): 
+def load_dataloader(args, type, normalize, norm_data=None, shuffle=True): 
     file_path = args.data_path + '/' + type + '.h5'
     seq_length = int(args.seq_length)
+    downsample = int(args.downsample)
     batch_size = int(args.batch_size)
-    stride = int(args.stride) if type == 'training' else seq_length//2
-    
+    stride = int(args.stride) if type == 'training' else seq_length//2    
 
-    X, y = read_variables(file_path, args.task, seq_length, stride)
+    logger.info("Retrieving {} data for sequences {} ms long and downsampling to {} Hz...".format(type, int(seq_length/240*1000), 240/downsample))
+
+    X, y = read_variables(file_path, args.task, seq_length, stride, downsample)
+
+    if normalize:
+        mean, std_dev = None, None
+        if norm_data is None:
+            mean, std_dev = X.mean(dim=0), X.std(dim=0)
+            norm_data = (mean, std_dev)
+            with h5py.File(args.data_path + '/normalization.h5','w') as f:
+                f['mean'], f['std_dev'] = mean, std_dev
+        else:
+            mean, std_dev = norm_data
+        X = X.sub(mean).div(std_dev + 1e-8)
 
     logger.info("Data for {} have shapes (X, y): {}, {}".format(type, X.shape, y.shape))
 
-    X = X.view(-1, seq_length, X.shape[1])
-    y = y.view(-1, seq_length, y.shape[1])
+    X = X.view(-1, math.ceil(seq_length/downsample), X.shape[1])
+    y = y.view(-1, math.ceil(seq_length/downsample), y.shape[1])
 
     logger.info("Reshaped {} shapes (X, y): {}, {}".format(type, X.shape, y.shape))
     
     dataset = TensorDataset(X, y)
     
     shuffle = True if type == 'training' else False
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=True)
 
     logger.info("Number of {} samples: {}".format(type, len(dataset)))
 
-    return dataloader
+    return dataloader, norm_data
