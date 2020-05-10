@@ -1,0 +1,11 @@
+python test-seq2seq.py  --task conversion \
+                        --data-path-parent /groups/MotionPred/motion-inference/upper-body \
+                        --figure-file-path ./posture-images/upper-body/seq2seq-histogram.pdf \
+                        --model-dir ./models/motion-inference/upper-body/seq2seq \
+                        --representation quaternions \
+                        --batch-size=512 \
+                        --seq-length=30 \
+                        --downsample=6 \
+                        --stride=30 \
+                        --hidden-size=512 \
+                        --attention=None

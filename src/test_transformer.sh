@@ -1,0 +1,13 @@
+python test-transformer.py --task conversion \
+                           --data-path-parent /groups/MotionPred/motion-inference/upper-body \
+                           --figure-file-path ./posture-images/upper-body/transformer-enc-histogram.pdf \
+                           --model-dir ./models/motion-inference/upper-body/transformer-enc \
+                           --representation quaternions \
+                           --batch-size=512 \
+                           --seq-length=30 \
+                           --downsample=6 \
+                           --stride=30 \
+                           --num-heads=4 \
+                           --dim-feedforward=200 \
+                           --dropout=0.0 \
+                           --num-layers=2
