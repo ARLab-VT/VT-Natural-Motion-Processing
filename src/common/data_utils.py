@@ -20,8 +20,8 @@ class XSensDataIndices:
                         'normSensorAcceleration']
 
         segment_group = ['position', 'normPositions', 'velocity', 'acceleration', 'normAcceleration',
-                         'angularVelocity', 'angularAcceleration',
-                         'orientation', 'normOrientation', 'normExpmapOrientation']
+                         'sternumNormAcceleration', 'angularVelocity', 'angularAcceleration',
+                         'orientation', 'normOrientation', 'normExpmapOrientation', 'sternumNormOrientation']
 
         joint_group = ['jointAngle', 'jointAngleXZY']
 
@@ -73,7 +73,7 @@ class XSensDataIndices:
             req_items = valid_items
 
         num_valid_items = len(valid_items)
-        dims = 4 if req_label in ['orientation', 'normOrientation', 'normSensorOrientation'] else 3
+        dims = 4 if req_label in ['orientation', 'normOrientation', 'sternumNormOrientation', 'normSensorOrientation'] else 3
 
         indices = [list(range(i, i+dims))
                    for i in range(0, dims*num_valid_items, dims)]
@@ -158,7 +158,7 @@ def add_normalized_positions(filepaths, new_group_name):
                   filepath))
         h5_file.close()
 
-def add_normalized_accelerations(filepaths, new_group_name):
+def add_normalized_accelerations(filepaths, new_group_name, root=0):
     for filepath in filepaths:
         try:
             h5_file = h5py.File(filepath, 'r+')
@@ -170,7 +170,7 @@ def add_normalized_accelerations(filepaths, new_group_name):
         quat = quat.reshape(quat.shape[1], quat.shape[0])
         quat = quat.reshape(quat.shape[0], -1, 4)
 
-        acc = np.array(h5_file['acceleration'][:, :])
+        acc = np.array(h5_file['sensorFreeAcceleration'][:, :])
         acc = acc.reshape(acc.shape[1], acc.shape[0])
         acc = acc.reshape(acc.shape[0], -1, 3)
 
@@ -178,11 +178,11 @@ def add_normalized_accelerations(filepaths, new_group_name):
 
         norm_acc = np.zeros(acc.shape)
 
-        pelvis_rot = np.linalg.inv(quat_to_rotMat(torch.tensor(quat[:, 0, :])))
-        pelvis_acc = acc[:, 0, :]
+        root_rot = np.linalg.inv(quat_to_rotMat(torch.tensor(quat[:, root, :])))
+        root_acc = acc[:, root, :]
         for i in range(0, acc.shape[1]):
-            relative_acc = np.expand_dims(acc[:, i, :] - pelvis_acc, axis=2)
-            norm_acc[:, i, :] = np.squeeze(np.matmul(pelvis_rot, relative_acc), axis=2)
+            relative_acc = np.expand_dims(acc[:, i, :] - root_acc, axis=2)
+            norm_acc[:, i, :] = np.squeeze(np.matmul(root_rot, relative_acc), axis=2)
 
         norm_acc = norm_acc.reshape(norm_acc.shape[0], -1) 
         norm_acc = norm_acc.reshape(norm_acc.shape[1], norm_acc.shape[0])
@@ -196,7 +196,7 @@ def add_normalized_accelerations(filepaths, new_group_name):
         h5_file.close()
 
 
-def add_normalized_quaternions(filepaths, group_name, new_group_name):
+def add_normalized_quaternions(filepaths, group_name, new_group_name, root=0):
     for filepath in filepaths:
         try:
             h5_file = h5py.File(filepath, 'r+')
@@ -212,10 +212,10 @@ def add_normalized_quaternions(filepaths, group_name, new_group_name):
 
         norm_quat = np.zeros(quat.shape)
 
-        pelvis = np.linalg.inv(quat_to_rotMat(torch.tensor(quat[:, 0, :])))
+        root_rotMat = np.linalg.inv(quat_to_rotMat(torch.tensor(quat[:, root, :])))
         for i in range(0, quat.shape[1]):
             rotMat = quat_to_rotMat(torch.tensor(quat[:, i, :])) 
-            norm_rotMat = np.matmul(pelvis, rotMat)
+            norm_rotMat = np.matmul(root_rotMat, rotMat)
             norm_quat[:, i, :] = rotMat_to_quat(norm_rotMat)
 
         norm_quat = norm_quat.reshape(norm_quat.shape[0], -1) 

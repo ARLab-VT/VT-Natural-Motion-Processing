@@ -52,7 +52,6 @@ class Skeleton:
             parent = self.segment_parents[segment]
         
             if parent is None:
-                #positions[i] = torch.tensor([0.000, 0.000,  1.000])
                 continue
             else:
                 parent_indices = xsens_indices({'orientation' : [parent]})['orientation'][0]
@@ -75,23 +74,26 @@ class Skeleton:
             xs = list(position[indices, 0])
             ys = list(position[indices, 1])
             zs = list(position[indices, 2])
-
+            
             ax.scatter(xs, ys, zs, c=colors[i])
             ax.plot(xs, ys, zs, color=colors[i])
+
+        ax.view_init(elev=0)
+        ax.grid(False)
        
         # Setting the axes properties
-        ax.set_xlim3d([-2.0, 2.0])
+        ax.set_xlim3d([-1.0, 1.0])
         ax.set_xlabel('X')
 
-        ax.set_ylim3d([-2.0, 2.0])
+        ax.set_ylim3d([-1.0, 1.0])
         ax.set_ylabel('Y')
 
-        ax.set_zlim3d([-2.0, 2.0])
+        ax.set_zlim3d([-1.0, 1.0])
         ax.set_zlabel('Z')
 
         plt.show()
 
-    def visualize_motion(self, orientations, continuous=False):
+    def animate_motion(self, orientations, azim, elev, title=None, continuous=False):
         if len(orientations.shape) == 1:
             orientations = orientations.unsqueeze(0)       
  
@@ -111,37 +113,68 @@ class Skeleton:
                     line.set_linestyle('-')
             return lines
 
-        # Attaching 3D axis to the figure
         fig = plt.figure()
         ax = p3.Axes3D(fig)
 
         data = self.forward_kinematics(orientations)
 
         lines = [ax.plot([0], [0], [0])[0] for _ in range(6)]
+        limits = [-1.0, 1.0]
+        
+        self._setup_axis(ax, limits, title, azim, elev)
 
-        # Setting the axes properties
-        ax.set_xlim3d([-2.0, 2.0])
-        ax.set_xlabel('X')
+        line_ani = animation.FuncAnimation(fig, update_lines, frames=range(data.shape[0]), fargs=(data, lines),
+										   interval=25, blit=True)
+        plt.show()
+        return line_ani
 
-        ax.set_ylim3d([-2.0, 2.0])
-        ax.set_ylabel('Y')
+    def compare_motion(self, orientations, figname, azim, elev, titles=None):
+        if len(orientations.shape) == 1:
+            orientations = orientations.unsqueeze(0)
 
-        ax.set_zlim3d([-2.0, 2.0])
-        ax.set_zlabel('Z')
+        def update_lines(num, data, lines):
+            positions = data[num]
 
-        ax.set_title('3D Test')
+            for i, line in enumerate(lines):
+                xs = list(positions[self.skeleton_tree[i], 0])
+                ys = list(positions[self.skeleton_tree[i], 1])
+                zs = list(positions[self.skeleton_tree[i], 2])
 
-        # Hide grid lines
+                line.set_data(xs, ys)
+                line.set_3d_properties(zs)
+            return lines
+
+        num_plots = orientations.shape[0]
+        fig = plt.figure(figsize=(orientations.shape[0]*3, 3))
+        data = self.forward_kinematics(orientations)
+        
+        limits = [-1.0, 1.0]
+        for i in range(orientations.shape[0]):
+            ax = fig.add_subplot(1, orientations.shape[0], i+1, projection='3d')
+
+            lines = [ax.plot([0], [0], [0])[0] for _ in range(6)]
+            
+            self._setup_axis(ax, limits, titles, azim, elev)
+
+            update_lines(i, data, lines)
+
+        plt.subplots_adjust(wspace=0)
+        plt.show()
+        fig.savefig(figname, bbox_inches='tight')
+        return fig
+
+    def _setup_axis(self, ax, limits, titles, azim, elev):
+        ax.set_xlim3d(limits)
+        ax.set_ylim3d(limits)
+        ax.set_zlim3d(limits)
+
         ax.grid(False)
 
-        # Hide axes ticks
+        if titles is not None:
+            ax.set_title(titles[i])
+
         ax.set_xticks([])
         ax.set_yticks([])
         ax.set_zticks([])
-
-        # Creating the Animation object
-        line_ani = animation.FuncAnimation(fig, update_lines, frames=range(data.shape[0]), fargs=(data, lines),
-										   interval=25, blit=True)
-
-        plt.show()
-        return line_ani
+            
+        ax.view_init(azim=azim, elev=elev)
