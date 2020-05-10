@@ -25,44 +25,7 @@ class Timer:
         self.interval = self.end - self.start
 
 
-class ExpmapToQuatLoss(nn.Module):
-    def __init__(self):
-        super(ExpmapToQuatLoss, self).__init__()        
-
-    def forward(self, predictions, targets):
-        predictions = predictions.view(-1,3)
-        targets = targets.view(-1,3)
-
-        predictions = rotMat_to_quat(expmap_to_rotMat(predictions.double()))
-        targets = rotMat_to_quat(expmap_to_rotMat(targets.double()))
-
-        return F.l1_loss(predictions, targets)
-
-def train(model, optimizer, data, training_criterion, device, full_transformer=False):
-    model.train()
-    inputs, targets = data
-    inputs = inputs.permute(1, 0, 2).to(device).double()
-    targets = targets.permute(1, 0, 2).to(device).double()
-
-    if full_transformer:
-        last_input = inputs[-1, :].unsqueeze(0)
-        tgt = torch.cat((last_input, targets), dim=0)
-        output = model(inputs, tgt[:-1, :])
-    else:
-        output = model(inputs)
-
-    loss = training_criterion(output, targets)
-  
-    loss.backward()
-    
-    #torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
-    
-    optimizer.step()
-    optimizer.zero_grad()
-
-    return loss.item()
-
-def loss_batch(model, optimizer, data, criterion, device, full_transformer=False):
+def loss_batch(model, optimizer, data, criterion, device, full_transformer=False, average_batch=True):
 
     if optimizer is None:
         model.eval()
@@ -82,11 +45,11 @@ def loss_batch(model, optimizer, data, criterion, device, full_transformer=False
             padding = torch.zeros((inputs.shape[0], inputs.shape[1], tgt.shape[2] - inputs.shape[2])).to(device).double()
             inputs = torch.cat((inputs, padding), dim=2)
         
-        output = model(inputs, tgt[:-1,:])
+        outputs = model(inputs, tgt[:-1,:])
     else:
-        output = model(inputs)    
+        outputs = model(inputs)    
     
-    loss = criterion(output, targets)
+    loss = criterion(outputs, targets)
             
     if optimizer is not None:
         loss.backward()
@@ -94,9 +57,18 @@ def loss_batch(model, optimizer, data, criterion, device, full_transformer=False
         optimizer.step()
         optimizer.zero_grad()
 
-    return loss.item()
+    if average_batch:
+        return loss.item()
+    else:
+        losses = []
+        for b in range(outputs.shape[1]):
+            sample_loss = criterion(outputs[:,b,:], targets[:,b,:])
+            losses.append(sample_loss.item())
 
-def inference(model, data, criterion, device):
+        return losses
+
+        
+def inference(model, data, criterion, device, average_batch=True):
     model.eval()
 
     inputs, targets = data
@@ -107,15 +79,23 @@ def inference(model, data, criterion, device):
 
     if pred.shape[2] > inputs.shape[2]:
         padding = torch.zeros((inputs.shape[0], inputs.shape[1], pred.shape[2] - inputs.shape[2])).to(device).double()
-        inputs = torch.cat((inputs, padding), dim=2)
+        inputs = torch.cat((inputs.clone(), padding), dim=2)
+
+    memory = model.encoder(model.pos_decoder(inputs))
     
     for i in range(pred.shape[0]-1):
-        next_pred = model(inputs, pred[:i+1,:])
-        pred[i+1,:] = next_pred[-1, :]
+        next_pred = model.inference(memory, pred[:i+1,:].clone())
+        pred[i+1,:] = pred[i+1,:].clone() + next_pred[-1, :].clone()
     
-    loss = criterion(pred[1:,:], targets)
-    
-    return loss.item()
+    if average_batch:
+        loss = criterion(pred[1:,:], targets)
+        return loss.item()
+    else:
+        losses = []
+        for b in range(pred.shape[1]):
+            loss = criterion(pred[1:, b, :], targets[:, b, :]) 
+            losses.append(loss.item())
+        return losses
 
 
 def fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, validation_criteria, device, model_file_path, full_transformer=False):
@@ -155,11 +135,13 @@ def fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, va
         logger.info("Epoch {} - Training Loss: {} - Val Loss: {}".format(str(epoch+1), str(loss), ", ".join(map(str, val_loss))))
         
         if full_transformer:
-            with torch.no_grad():
-                inference_losses = [inference(model, data, training_criterion, device)
-                                    for _, data in enumerate(val_dataloader, 0)]
-            inference_loss = np.sum(inference_losses) / len(inference_losses)
-            logger.info("Inference Loss: {}".format(str(inference_loss)))
+            inference_loss = []
+            for validation_criterion in validation_criteria:
+                with torch.no_grad():
+                    inference_losses = [inference(model, data, validation_criterion, device)
+                                        for _, data in enumerate(val_dataloader, 0)]
+                inference_loss.append(np.sum(inference_losses) / len(inference_losses))
+            logger.info("Inference Loss: {}".format(", ".join(map(str, inference_loss))))
 
         if val_loss[0] < min_val_loss:
             min_val_loss = val_loss[0]

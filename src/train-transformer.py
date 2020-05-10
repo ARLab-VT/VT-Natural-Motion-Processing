@@ -5,6 +5,7 @@ from transformers.training_utils import *
 from transformers.transformers import *
 from common.data_utils import *
 from common.logging import logger
+from common.losses import *
 from pathlib import Path
 import torch
 from torch import nn, optim, Tensor
@@ -99,12 +100,12 @@ if __name__ == "__main__":
     dim_feedforward = int(args.dim_feedforward)
     dropout = float(args.dropout)
     num_layers = int(args.num_layers)
-
+    quaternions = (args.representation == 'quaternions')
    
     if args.full_transformer:
-        model = InferenceTransformer(decoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size, quaternions=True)
+        model = InferenceTransformer(decoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, quaternions=quaternions)
     else:
-        model = InferenceTransformerEncoder(encoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size, quaternions=True)    
+        model = InferenceTransformerEncoder(encoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size, quaternions=quaternions)    
     
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)    
 
@@ -122,7 +123,7 @@ if __name__ == "__main__":
 
     dataloaders = (train_dataloader, val_dataloader)
     training_criterion = nn.L1Loss()
-    validation_criteria = [nn.L1Loss()]
+    validation_criteria = [nn.L1Loss(), QuatDistance()]
     
     if args.representation == 'expmap':
         validation_criteria.append(ExpmapToQuatLoss())

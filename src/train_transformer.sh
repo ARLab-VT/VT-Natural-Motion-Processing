@@ -1,17 +1,17 @@
-python train-transformer.py --task prediction \
-                        --data-path /groups/MotionPred/motion-inference/full-set-1 \
-                        --representation quaternions \
-                        --full-transformer \
-                        --model-file-path ./models/motion-prediction/full-transformer-model-full-set.pt \
-                        --batch-size=32 \
-                        --seq-length=160 \
-                        --downsample=6 \
-                        --stride=160 \
-                        --learning-rate=0.0001 \
-                        --beta-one=0.95 \
-                        --beta-two=0.999 \
-                        --num-epochs=5 \
-                        --num-heads=4 \
-                        --dim-feedforward=2056 \
-                        --dropout=0.0 \
-                        --num-layers=2
+python train-transformer.py --task conversion \
+                            --data-path test-folder \
+                            --representation quaternions \
+                            --model-file-path model.pt \
+                            --full-transformer \
+                            --batch-size=32 \
+                            --seq-length=30 \
+                            --downsample=6 \
+                            --stride=30 \
+                            --learning-rate=0.001 \
+                            --beta-one=0.95 \
+                            --beta-two=0.999 \
+                            --num-epochs=5 \
+                            --num-heads=4 \
+                            --dim-feedforward=200 \
+                            --dropout=0.0 \
+                            --num-layers=2
