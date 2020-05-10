@@ -26,10 +26,14 @@ def parse_args():
 
     parser.add_argument('--data-path',
                         help='path to h5 files containing data (must contain training.h5 and validation.h5)')
+    parser.add_argument('--representation',
+                        help='data representation (quaternions, expmap, rotmat)', default='quaternions')
     parser.add_argument('--batch-size',
                         help='batch size for training', default=32)
     parser.add_argument('--seq-length',
                         help='sequence length for encoder/decoder', default=20)
+    parser.add_argument('--downsample',
+                        help='reduce sampling frequency of recorded data; default sampling frequency is 240 Hz', default=1)
     parser.add_argument('--stride',
                         help='stride used when running prediction tasks', default=3)          
     args = parser.parse_args()
@@ -39,7 +43,7 @@ def parse_args():
 
     return args
 
-def zero_velocity(dataloaders, criterion, seq_length):
+def zero_velocity(dataloaders, criterion):
     name = ["Training", "Validation", "Testing"]
     train_dataloader, val_dataloader, test_dataloader = dataloaders
     
@@ -49,7 +53,7 @@ def zero_velocity(dataloaders, criterion, seq_length):
         for index, data in enumerate(dataloaders[i], 0):
             inputs, targets = data
             final = inputs[:,-1,:].unsqueeze(1)
-            predictions = final.repeat(1,seq_length,1)
+            predictions = final.repeat(1,inputs.shape[1],1)
             loss = criterion(targets, predictions)
             avg_loss += loss
         avg_loss = avg_loss / len(dataloaders[i])
@@ -64,8 +68,6 @@ if __name__ == "__main__":
     logger.info("Starting Zero velocity...")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    seq_length = int(args.seq_length)
 
     train_dataloader = load_dataloader(args, "training")
     val_dataloader = load_dataloader(args, "validation")
@@ -73,7 +75,10 @@ if __name__ == "__main__":
     
     dataloaders = (train_dataloader, val_dataloader, test_dataloader)
     
-    criteria = (nn.L1Loss(), nn.SmoothL1Loss(), ExpmapToQuatLoss())
+    criteria = (nn.L1Loss(), nn.SmoothL1Loss())
+    if args.representation == 'expmap':
+        criteria.append(ExpmapToQuatLoss())
+
     for criterion in criteria:
         logger.info("Criterion for zero velocity: {}".format(str(criterion)))
-        zero_velocity(dataloaders, criterion, seq_length)
+        zero_velocity(dataloaders, criterion)
