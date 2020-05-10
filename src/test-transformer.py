@@ -77,7 +77,7 @@ if __name__ == "__main__":
     for arg in vars(args):
         logger.info("{} - {}".format(arg, getattr(args, arg)))
 
-    logger.info("Starting Transformer training...")
+    logger.info("Starting Transformer testing...")
     
     logger.info("Device count: {}".format(str(torch.cuda.device_count())))
 

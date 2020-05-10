@@ -68,7 +68,7 @@ if __name__ == "__main__":
     for arg in vars(args):
         logger.info("{} - {}".format(arg, getattr(args, arg)))
     
-    logger.info("Starting seq2seq model training...")
+    logger.info("Starting seq2seq model testing...")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
