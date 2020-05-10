@@ -156,7 +156,7 @@ if __name__ == "__main__":
             experiment_setup["Y"] += aux_task_output
             aux_output_requests = map_requests(aux_task_output, aux_output_label_request)
             output_requests.update(aux_output_requests)
-        
+            print(output_requests, aux_output_requests)        
         write_dataset(filepath_groups, "X", experiment_setup, input_requests)
         write_dataset(filepath_groups, "Y", experiment_setup, output_requests)         
     
