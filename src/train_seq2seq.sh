@@ -1,11 +1,11 @@
-python train-seq2seq.py --task prediction \
-                        --data-path /groups/MotionPred/motion-prediction/full-set \
-                        --model-file-path ./models/motion-prediction/seq2seq-dot-birnn-full-set.pt \
-                        --norm-quaternions \
+python train-seq2seq.py --task conversion \
+                        --data-path test-folder \
+                        --model-file-path model.pt \
+                        --representation quaternions \
                         --batch-size=32 \
-                        --seq-length=240 \
+                        --seq-length=30 \
                         --downsample=6 \
-                        --stride=240 \
+                        --stride=30 \
                         --learning-rate=0.001 \
                         --num-epochs=5 \
                         --hidden-size=512 \

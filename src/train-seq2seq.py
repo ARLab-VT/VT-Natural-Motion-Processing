@@ -3,6 +3,7 @@
 
 from seq2seq.training_utils import *
 from seq2seq.seq2seq import *
+from common.losses import *
 from common.data_utils import *
 from common.logging import *
 from pathlib import Path
@@ -36,8 +37,8 @@ def parse_args():
                         help='path to h5 files containing data (must contain training.h5 and validation.h5)')
     parser.add_argument('--model-file-path',
                         help='path to model file for saving it after training')
-    parser.add_argument('--norm-quaternions',
-                        help='will normalize quaternions if true', default=False, action='store_true')
+    parser.add_argument('--representation',
+                        help='will normalize if quaternions, will use expmap to quat validation loss if expmap', default='quaternion')
     parser.add_argument('--auxiliary-acc',
                         help='will train on auxiliary acceleration task if true', default=False, action='store_true')
     parser.add_argument('--batch-size',
@@ -99,7 +100,7 @@ if __name__ == "__main__":
     encoder_sched = optim.lr_scheduler.MultiStepLR(encoder_optim, milestones=[5], gamma=0.1)
 
     use_attention = False
-    if args.attention in ['add', 'dot', 'concat', 'general', 'activated-general', 'biased-general']:
+    if args.attention in ["add", "dot", "concat", "general", "activated-general", "biased-general"]:
         decoder = get_attn_decoder(decoder_feature_size,
                                    args.attention,
                                    device,
@@ -122,17 +123,23 @@ if __name__ == "__main__":
     optims = (encoder_optim, decoder_optim)
     dataloaders = (train_dataloader, val_dataloader)
     epochs = int(args.num_epochs)
-    criterion = nn.L1Loss()
+    training_criterion = nn.L1Loss()
+    validation_criteria = [nn.L1Loss(), QuatDistance()]
+    norm_quaternions = (args.representation == "quaternions")
+
+    if args.representation == "expmap":
+        validation_criteria.append(ExpmapToQuatLoss())
+
     schedulers = (encoder_sched, decoder_sched)
 
     logger.info("Encoder for training: {}".format(str(encoder)))
     logger.info("Decoder for training: {}".format(str(decoder)))
     logger.info("Number of parameters: {}".format(str(encoder_params + decoder_params)))
     logger.info("Optimizers for training: {}".format(str(encoder_optim)))
-    logger.info("Criterion for training: {}".format(str(criterion)))
+    logger.info("Criterion for training: {}".format(str(training_criterion)))
 
-    fit(models, optims, epochs, dataloaders, criterion, schedulers, device, args.model_file_path, 
-        use_attention=use_attention, norm_quaternions=args.norm_quaternions, auxiliary_acc=args.auxiliary_acc)
+    fit(models, optims, epochs, dataloaders, training_criterion, validation_criteria, schedulers, device, args.model_file_path, 
+        use_attention=use_attention, norm_quaternions=norm_quaternions)
     
     logger.info("Completed Training...")
     logger.info("\n")

@@ -44,17 +44,12 @@ def get_attn_decoder(num_features, method, device, batch_size=32, hidden_size=64
     return decoder
 
 
-def loss_batch(data, models, opts, criterion, device, scaler=None, teacher_forcing_ratio=0.0, use_attention=False, norm_quaternions=False, auxiliary_acc=False):
+def loss_batch(data, models, opts, criterion, device, scaler=None, teacher_forcing_ratio=0.0, use_attention=False, norm_quaternions=False, average_batch=True):
     encoder, decoder = models
     input_batch, target_batch = data
 
-    input_batch = input_batch.to(device)
-    target_batch = target_batch.to(device)
-
-    main_task_idx = target_batch.shape[2]
-    aux_loss = 0
-    if auxiliary_acc:
-        main_task_idx -= 3 * (input_batch.shape[2] // 7)
+    input_batch = input_batch.to(device).float()
+    target_batch = target_batch.to(device).float()
 
     if opts is not None:
         encoder.train(), decoder.train()
@@ -65,16 +60,22 @@ def loss_batch(data, models, opts, criterion, device, scaler=None, teacher_forci
     loss = 0
     seq_length = input_batch.shape[1]
 
-    input = input_batch.permute(1, 0, 2).float()
+    input = input_batch.permute(1, 0, 2)
     encoder_outputs, encoder_hidden = encoder(input)
 
     decoder_hidden = encoder_hidden
-    decoder_input = torch.ones_like(target_batch[:, 0, :]).unsqueeze(0).float()
-    EOS = torch.zeros_like(target_batch[:, 0, :]).unsqueeze(0).float()
+    decoder_input = torch.ones_like(target_batch[:, 0, :]).unsqueeze(0)
+    EOS = torch.zeros_like(target_batch[:, 0, :]).unsqueeze(0)
+    outputs = torch.zeros_like(target_batch)
 
     use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
     
-    
+    if not average_batch:
+        if opts is not None:
+            logger.warning("average_batch must be true when training")
+            sys.exit()
+        losses = [0 for i in range(target_batch.shape[0])]
+
     for t in range(seq_length):
 
         if use_attention:
@@ -84,9 +85,9 @@ def loss_batch(data, models, opts, criterion, device, scaler=None, teacher_forci
             decoder_output, decoder_hidden = decoder(
                 decoder_input, decoder_hidden)
 
-        target = target_batch[:, t, :].unsqueeze(0).float()
+        target = target_batch[:, t, :].unsqueeze(0)
 
-        output = decoder_output[:, :, :main_task_idx] if auxiliary_acc else decoder_output
+        output = decoder_output
 
         if norm_quaternions:
             original_shape = output.shape
@@ -94,12 +95,7 @@ def loss_batch(data, models, opts, criterion, device, scaler=None, teacher_forci
             output = output.contiguous().view(-1,4)
             output = F.normalize(output, p=2, dim=1).view(original_shape)
 
-        if auxiliary_acc:
-            loss += criterion(output, target[:, :, :main_task_idx]) 
-            aux_loss += criterion(target[:, :, main_task_idx:], decoder_output[:, :, main_task_idx:])
-            output = torch.cat((output, decoder_output[:, :, main_task_idx:]), dim=2)
-        else:
-            loss += criterion(output, target)
+        outputs[:, t, :] = output
 
         if use_teacher_forcing:
             decoder_input = target
@@ -108,11 +104,10 @@ def loss_batch(data, models, opts, criterion, device, scaler=None, teacher_forci
                 break
             decoder_input = output.detach()
 
+    loss = criterion(outputs, target_batch)
+
     if opts is not None:
-        if auxiliary_acc:
-            (loss + aux_loss).backward()
-        else:
-            loss.backward()
+        loss.backward()
 
         encoder_opt.step()
         encoder_opt.zero_grad()
@@ -120,14 +115,21 @@ def loss_batch(data, models, opts, criterion, device, scaler=None, teacher_forci
         decoder_opt.step()
         decoder_opt.zero_grad()
 
-    return loss.item() / seq_length
+    if average_batch:
+        return loss.item()
+    else:
+        losses = []
+        for b in range(outputs.shape[0]):
+            sample_loss = criterion(outputs[b,:], target_batch[b,:])
+            losses.append(sample_loss.item())
+
+        return losses
 
 
-def fit(models, optims, epochs, dataloaders, criterion, schedulers, device, model_file_path,
+def fit(models, optims, epochs, dataloaders, training_criterion, validation_criteria, schedulers, device, model_file_path,
         teacher_forcing_ratio=0.0,
         use_attention=False,
         norm_quaternions=False,
-        auxiliary_acc=False,
         schedule_rate=1.0):
 
     train_dataloader, val_dataloader = dataloaders
@@ -146,10 +148,9 @@ def fit(models, optims, epochs, dataloaders, criterion, schedulers, device, mode
         for index, data in enumerate(train_dataloader, 0):
             with Timer() as timer:
                 loss = loss_batch(data, models,
-                                  optims, criterion, device,
+                                  optims, training_criterion, device,
                                   use_attention=use_attention,
-                                  norm_quaternions=norm_quaternions,
-                                  auxiliary_acc=auxiliary_acc)
+                                  norm_quaternions=norm_quaternions)
 
                 losses.append(loss)
             total_time += timer.interval
@@ -158,24 +159,28 @@ def fit(models, optims, epochs, dataloaders, criterion, schedulers, device, mode
                                                                                                        str(index), 
                                                                                                        str(num_batches), 
                                                                                                        str(loss)))
+        val_loss = []
+        for validation_criterion in validation_criteria:
+            with torch.no_grad():
+                val_losses = [loss_batch(data, models, 
+                                         None, validation_criterion, device, 
+                                         use_attention=use_attention, 
+                                         norm_quaternions=norm_quaternions)
+                                         for _, data in enumerate(val_dataloader, 0)]
 
-        with torch.no_grad():
-            val_losses = [loss_batch(data, models, None, criterion, device, use_attention=use_attention, norm_quaternions=norm_quaternions, auxiliary_acc=auxiliary_acc)
-                          for _, data in enumerate(val_dataloader, 0)]
+            val_loss.append(np.sum(val_losses) / len(val_losses))
+
 
         loss = np.sum(losses) / len(losses)
-        val_loss = np.sum(val_losses) / len(val_losses)
-
-        plot_losses.append((loss, val_loss))
 
         for scheduler in schedulers:
             scheduler.step()
 
-        logger.info("Training Loss: {} - Val Loss: {}".format(str(loss), str(val_loss)))
+        logger.info("Training Loss: {} - Val Loss: {}".format(str(loss), ", ".join(map(str, val_loss))))
 
         teacher_forcing_ratio *= schedule_rate
-        if val_loss < min_val_loss:
-            min_val_loss = val_loss
+        if val_loss[0] < min_val_loss:
+            min_val_loss = val_loss[0]
             logger.info("Saving model to {}".format(model_file_path))
             torch.save({
                 'encoder_state_dict': models[0].state_dict(),
