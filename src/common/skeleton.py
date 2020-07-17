@@ -128,7 +128,7 @@ class Skeleton:
         plt.show()
         return line_ani
 
-    def compare_motion(self, orientations, figname, azim, elev, titles=None):
+    def compare_motion(self, orientations, azim, elev, figname=None, titles=None):
         if len(orientations.shape) == 1:
             orientations = orientations.unsqueeze(0)
 
@@ -160,7 +160,8 @@ class Skeleton:
 
         plt.subplots_adjust(wspace=0)
         plt.show()
-        fig.savefig(figname, bbox_inches='tight')
+        if figname:
+            fig.savefig(figname, bbox_inches='tight')
         return fig
 
     def _setup_axis(self, ax, limits, titles, azim, elev):
