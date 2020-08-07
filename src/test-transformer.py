@@ -52,6 +52,8 @@ def parse_args():
                         help='sequence length for model, will be downsampled if downsample is provided', default=20)
     parser.add_argument('--downsample',
                         help='reduce sampling frequency of recorded data; default sampling frequency is 240 Hz', default=1)
+    parser.add_argument('--in-out-ratio',
+                        help='ratio of input/output; seq_length / downsample = input length = 10, output length = input length / in_out_ratio', default=1)
     parser.add_argument('--stride',
                         help='stride used when reading data in for running prediction tasks', default=3)
     parser.add_argument('--num-heads',
@@ -82,7 +84,7 @@ if __name__ == "__main__":
     logger.info("Device count: {}".format(str(torch.cuda.device_count())))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.info("Training on {}...".format(device))    
+    logger.info("Testing on {}...".format(device))    
     seq_length = int(args.seq_length)//int(args.downsample)
 
     data_paths = [args.data_path_parent + '/' + name for name in os.listdir(args.data_path_parent) if os.path.isdir(args.data_path_parent + '/' + name)]
@@ -101,10 +103,10 @@ if __name__ == "__main__":
             mean, std_dev = torch.Tensor(f["mean"]), torch.Tensor(f["std_dev"])
         norm_data = (mean, std_dev)
 
-        val_dataloader, _ = load_dataloader(args, "validation", normalize, norm_data=norm_data)
+        test_dataloader, _ = load_dataloader(args, "testing", normalize, norm_data=norm_data)
      
-        encoder_feature_size = val_dataloader.dataset[0][0].shape[1]
-        decoder_feature_size = val_dataloader.dataset[0][1].shape[1]
+        encoder_feature_size = test_dataloader.dataset[0][0].shape[1]
+        decoder_feature_size = test_dataloader.dataset[0][1].shape[1]
 
         num_heads = int(args.num_heads) if args.full_transformer else encoder_feature_size
         dim_feedforward = int(args.dim_feedforward)
@@ -115,6 +117,7 @@ if __name__ == "__main__":
         if args.full_transformer:
             model = InferenceTransformer(decoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, quaternions=quaternions)
         else:
+            num_heads = encoder_feature_size
             model = InferenceTransformerEncoder(encoder_feature_size, num_heads, dim_feedforward, dropout, num_layers, decoder_feature_size, quaternions=quaternions)    
 
         checkpoint = torch.load(model_paths[i], map_location=device)
@@ -133,11 +136,11 @@ if __name__ == "__main__":
         if args.full_transformer:    
             with torch.no_grad():
                 inference_losses = [inference(model, data, criterion, device, average_batch=False)
-                                    for _, data in enumerate(val_dataloader, 0)]
+                                    for _, data in enumerate(test_dataloader, 0)]
         else:
             with torch.no_grad():
                 inference_losses = [loss_batch(model, None, data, criterion, device, full_transformer=args.full_transformer, average_batch=False)
-                                    for _, data in enumerate(val_dataloader, 0)]
+                                    for _, data in enumerate(test_dataloader, 0)]
 
         def flatten(l): return [item for sublist in l for item in sublist]
 

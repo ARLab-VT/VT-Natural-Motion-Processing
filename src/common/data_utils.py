@@ -158,7 +158,7 @@ def add_normalized_positions(filepaths, new_group_name):
                   filepath))
         h5_file.close()
 
-def add_normalized_accelerations(filepaths, new_group_name, root=0):
+def add_normalized_accelerations(filepaths, group_name, new_group_name, root=0):
     for filepath in filepaths:
         try:
             h5_file = h5py.File(filepath, 'r+')
@@ -170,7 +170,7 @@ def add_normalized_accelerations(filepaths, new_group_name, root=0):
         quat = quat.reshape(quat.shape[1], quat.shape[0])
         quat = quat.reshape(quat.shape[0], -1, 4)
 
-        acc = np.array(h5_file['sensorFreeAcceleration'][:, :])
+        acc = np.array(h5_file[group_name][:, :])
         acc = acc.reshape(acc.shape[1], acc.shape[0])
         acc = acc.reshape(acc.shape[0], -1, 3)
 
@@ -280,12 +280,17 @@ def discard_remainder(data, seq_length):
     return data
 
 
-def stride_downsample_sequences(data, seq_length, stride, downsample, offset=0):
-    output = []
+def stride_downsample_sequences(data, seq_length, stride, downsample, offset=0, in_out_ratio=1):
+    samples = []
     for i in range(0, data.shape[0] - 2*seq_length, stride):
-        output.append(data[i+offset:i+seq_length+offset:downsample, :])
-    output = np.concatenate(output, axis=0)
-    return output
+        i_shift = i+offset
+        sample = data[i_shift:i_shift+seq_length:downsample, :]
+        
+        ratio_shift = sample.shape[0] - sample.shape[0]//in_out_ratio
+        sample = sample[ratio_shift:, :]
+        samples.append(sample)
+    samples = np.concatenate(samples, axis=0)
+    return samples
 
 
 def read_h5(filepaths, requests):
@@ -318,7 +323,7 @@ def read_h5(filepaths, requests):
     return dataset
 
 
-def read_variables(h5_file_path, task, seq_length, stride, downsample):
+def read_variables(h5_file_path, task, seq_length, stride, downsample, in_out_ratio=1):
     X, y = None, None
     h5_file = h5py.File(h5_file_path, 'r')
     for filename in h5_file.keys():
@@ -330,7 +335,7 @@ def read_variables(h5_file_path, task, seq_length, stride, downsample):
         elif task == 'conversion':
             y_temp = h5_file[filename]['Y']
             y_temp = discard_remainder(y_temp, 2*seq_length)
-            y_temp = stride_downsample_sequences(y_temp, seq_length, stride, downsample)
+            y_temp = stride_downsample_sequences(y_temp, seq_length, stride, downsample, in_out_ratio=in_out_ratio)
         else:
             logger.error("Task must be either prediction or conversion, found {}".format(task))
             sys.exit()
@@ -355,11 +360,12 @@ def load_dataloader(args, type, normalize, norm_data=None, shuffle=True):
     seq_length = int(args.seq_length)
     downsample = int(args.downsample)
     batch_size = int(args.batch_size)
+    in_out_ratio = int(args.in_out_ratio)
     stride = int(args.stride) if type == 'training' else seq_length//2    
 
     logger.info("Retrieving {} data for sequences {} ms long and downsampling to {} Hz...".format(type, int(seq_length/240*1000), 240/downsample))
 
-    X, y = read_variables(file_path, args.task, seq_length, stride, downsample)
+    X, y = read_variables(file_path, args.task, seq_length, stride, downsample, in_out_ratio=in_out_ratio)
 
     if normalize:
         mean, std_dev = None, None
@@ -375,7 +381,7 @@ def load_dataloader(args, type, normalize, norm_data=None, shuffle=True):
     logger.info("Data for {} have shapes (X, y): {}, {}".format(type, X.shape, y.shape))
 
     X = X.view(-1, math.ceil(seq_length/downsample), X.shape[1])
-    y = y.view(-1, math.ceil(seq_length/downsample), y.shape[1])
+    y = y.view(-1, math.ceil(seq_length/(downsample*in_out_ratio)), y.shape[1])
 
     logger.info("Reshaped {} shapes (X, y): {}, {}".format(type, X.shape, y.shape))
     

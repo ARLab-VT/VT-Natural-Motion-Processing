@@ -1,11 +1,13 @@
 python test-seq2seq.py  --task conversion \
-                        --data-path-parent /groups/MotionPred/motion-inference/upper-body \
-                        --figure-file-path ./posture-images/upper-body/seq2seq-histogram.pdf \
-                        --model-dir ./models/motion-inference/upper-body/seq2seq \
+                        --data-path-parent /groups/MotionPred/motion-inference/full-body-special-sets \
+                        --figure-file-path ./posture-images/full-body/seq2seq-dot-birnn-histogram-special-test.pdf \
+                        --figure-title "Seq2Seq (BiRNN, Attn)" \
+                        --model-dir ./models/motion-inference/full-body/seq2seq-dot-birnn \
                         --representation quaternions \
                         --batch-size=512 \
                         --seq-length=30 \
                         --downsample=6 \
                         --stride=30 \
                         --hidden-size=512 \
-                        --attention=None
+                        --attention=dot \
+                        --bidirectional
