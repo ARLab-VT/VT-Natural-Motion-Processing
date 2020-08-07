@@ -24,6 +24,7 @@ import h5py
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import matplotlib.font_manager
 
 torch.manual_seed(42)
 np.random.seed(42)
@@ -40,6 +41,10 @@ def parse_args():
                         help='path to parent folder of directories with h5 files (folders must contain normalization.h5 and validation.h5)')
     parser.add_argument('--figure-file-path',
                         help='path to where the figure should be saved') 
+    parser.add_argument('--figure-title',
+                        help='title of the histogram plot')
+    parser.add_argument('--include-legend',
+                        help='will use bidirectional encoder', default=False, action='store_true')
     parser.add_argument('--model-dir',
                         help='path to model file directory')
     parser.add_argument('--representation',
@@ -92,6 +97,17 @@ if __name__ == "__main__":
 
     data_paths.sort()
     model_paths.sort()
+
+    plt.style.use('fivethirtyeight')
+    plt.rcParams['font.family'] = "Times New Roman"
+    plt.rcParams['axes.titlesize']=24
+    plt.rcParams['axes.labelsize']=22
+    plt.rcParams['xtick.labelsize']=18
+    plt.rcParams['ytick.labelsize']=18
+    plt.rcParams['figure.facecolor'] = 'white'
+    plt.rcParams['axes.facecolor'] = 'white'
+    plt.rcParams['savefig.edgecolor'] = 'white'
+    plt.rcParams['savefig.facecolor'] = 'white'
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -149,14 +165,20 @@ if __name__ == "__main__":
         inference_loss = np.sum(inference_losses) / len(inference_losses)
         logger.info("Inference Loss: {}".format(inference_loss)) 
         
-        ax.hist(inference_losses, bins=60, density=True, histtype=u'step')
-        ax.set_xlim(0, 30)
-        ax.set_xticks(range(0, 35, 5))
-        ax.set_xticklabels(range(0, 35, 5))
+        ax.hist(inference_losses, bins=60, density=True, histtype=u'step', linewidth=2)
+        ax.set_xlim(0, 40)
+        ax.set_xticks(range(0, 45, 5))
+        ax.set_xticklabels(range(0, 45, 5))
+
+        ax.set_ylim(0, 0.20)
+        ax.set_yticks(np.arange(0, 0.20, 0.05))
+        ax.set_yticklabels(np.arange(0, 0.20, 0.05).round(decimals=2))    
     
+    ax.set_title(args.figure_title)
     ax.set_xlabel('Sequence Angular Error in Degrees')
     ax.set_ylabel('Percentage')
-    ax.legend(['Config. 1', 'Config. 2', 'Config. 3', 'Config. 4']) 
+    if args.include_legend:
+        ax.legend(['Config. 1', 'Config. 2', 'Config. 3', 'Config. 4'])
     figname = args.figure_file_path
     fig.savefig(figname, bbox_inches='tight')
 

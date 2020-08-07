@@ -1,7 +1,7 @@
 python test-transformer.py --task conversion \
-                           --data-path-parent /groups/MotionPred/motion-inference/upper-body-special-sets \
-                           --figure-file-path ./posture-images/upper-body/transformer-enc-histogram-special-test.pdf \
-                           --model-dir ./models/motion-inference/upper-body/transformer-enc \
+                           --data-path-parent /groups/MotionPred/motion-inference/full-body-special-sets \
+                           --figure-file-path ./posture-images/full-body/transformer-enc-histogram-special-test.pdf \
+                           --model-dir ./models/motion-inference/full-body/transformer-enc \
                            --representation quaternions \
                            --batch-size=512 \
                            --seq-length=30 \

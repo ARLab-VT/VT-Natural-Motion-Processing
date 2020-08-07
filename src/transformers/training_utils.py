@@ -98,10 +98,9 @@ def inference(model, data, criterion, device, average_batch=True):
         return losses
 
 
-def fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, validation_criteria, device, model_file_path, full_transformer=False):
+def fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, validation_criteria, device, model_file_path, full_transformer=False, min_val_loss=math.inf):
     train_dataloader, val_dataloader = dataloaders
     total_time = 0
-    min_val_loss = math.inf
 
     for epoch in range(epochs):
         losses = 0
@@ -152,3 +151,4 @@ def fit(model, optimizer, scheduler, epochs, dataloaders, training_criterion, va
             }, model_file_path)
 
     
+    return min_val_loss

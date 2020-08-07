@@ -36,7 +36,7 @@ def parse_args():
     parser.add_argument('--data-path',
                         help='path to h5 files containing data (must contain training.h5 and validation.h5)')
     parser.add_argument('--representation',
-                        help='data representation (quaternions, expmap, rotmat)', default='quaternions')
+                        help='will normalize if quaternions, will use expmap to quat validation loss if expmap', default='quaternion')
     parser.add_argument('--full-transformer',
                         help='will use Transformer with both encoder and decoder if true, will only use encoder if false', default=False, action='store_true')
     parser.add_argument('--model-file-path',
@@ -50,21 +50,23 @@ def parse_args():
     parser.add_argument('--beta-two',
                         help='beta2 for adam optimizer', default=0.999)
     parser.add_argument('--seq-length',
-                        help='sequence length for model, will be downsampled if downsample is provided', default=20)
+                        help='sequence length for model, will be divided by downsample if downsample is provided', default=20)
     parser.add_argument('--downsample',
                         help='reduce sampling frequency of recorded data; default sampling frequency is 240 Hz', default=1)
+    parser.add_argument('--in-out-ratio',
+                        help='ratio of input/output; seq_length / downsample = input length = 10, output length = input length / in_out_ratio', default=1) 
     parser.add_argument('--stride',
                         help='stride used when reading data in for running prediction tasks', default=3)
     parser.add_argument('--num-epochs',
                         help='number of epochs for training', default=1)
     parser.add_argument('--num-heads',
-                        help='number of heads in Transformer Encoder')
+                        help='number of heads in Transformer')
     parser.add_argument('--dim-feedforward',
-                        help='number of dimensions in feedforward layer in Transformer Encoder')
+                        help='number of dimensions in feedforward layer in Transformer')
     parser.add_argument('--dropout',
-                        help='dropout percentage in Transformer Encoder')
+                        help='dropout percentage in Transformer')
     parser.add_argument('--num-layers',
-                        help='number of layers in Transformer Encoder')
+                        help='number of layers in Transformer')
 
     args = parser.parse_args()
 
@@ -87,6 +89,9 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Training on {}...".format(device))    
     seq_length = int(args.seq_length)//int(args.downsample)
+
+    assert seq_length % int(args.in_out_ratio) == 0
+
     lr = float(args.learning_rate)
 
     normalize = True    
