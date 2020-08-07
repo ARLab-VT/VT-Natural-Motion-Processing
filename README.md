@@ -1,4 +1,4 @@
-# XSens Motion Prediction
+# Virginia Tech Natural Motion Processing
 
 ## Table of Contents
 
