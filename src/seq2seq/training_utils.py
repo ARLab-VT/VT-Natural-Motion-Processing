@@ -26,13 +26,13 @@ class Timer:
 
 def get_encoder(num_features, device, hidden_size=64, dropout=0.0, bidirectional=False):
     encoder = EncoderRNN(num_features, hidden_size,
-                         dropout=dropout, bidirectional=bidirectional).to(device)
+                         dropout=dropout, bidirectional=bidirectional).double().to(device)
     return encoder
 
 
 def get_decoder(num_features, device, hidden_size=64, dropout=0.0):
     decoder = DecoderRNN(num_features, hidden_size,
-                         num_features, dropout=dropout).to(device)
+                         num_features, dropout=dropout).double().to(device)
     return decoder
 
 
@@ -40,7 +40,7 @@ def get_attn_decoder(num_features, method, device, batch_size=32, hidden_size=64
     attn = Attention(hidden_size, batch_size, method,
                      bidirectional_encoder=bidirectional_encoder)
     decoder = AttnDecoderRNN(num_features, num_features, hidden_size, hidden_size,
-                             attn, bidirectional_encoder=bidirectional_encoder).to(device)
+                             attn, bidirectional_encoder=bidirectional_encoder).double().to(device)
     return decoder
 
 
@@ -48,8 +48,8 @@ def loss_batch(data, models, opts, criterion, device, scaler=None, teacher_forci
     encoder, decoder = models
     input_batch, target_batch = data
 
-    input_batch = input_batch.to(device).float()
-    target_batch = target_batch.to(device).float()
+    input_batch = input_batch.to(device).double()
+    target_batch = target_batch.to(device).double()
 
     if opts is not None:
         encoder.train(), decoder.train()
@@ -58,7 +58,7 @@ def loss_batch(data, models, opts, criterion, device, scaler=None, teacher_forci
         encoder.eval(), decoder.eval()
 
     loss = 0
-    seq_length = input_batch.shape[1]
+    seq_length = target_batch.shape[1]
 
     input = input_batch.permute(1, 0, 2)
     encoder_outputs, encoder_hidden = encoder(input)
