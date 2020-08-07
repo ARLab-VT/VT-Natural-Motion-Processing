@@ -49,6 +49,8 @@ def parse_args():
                         help='sequence length for encoder/decoder', default=20)    
     parser.add_argument('--downsample',
                         help='reduce sampling frequency of recorded data; default sampling frequency is 240 Hz', default=1)
+    parser.add_argument('--in-out-ratio',
+                        help='ratio of input/output; seq_length / downsample = input length = 10, output length = input length / in_out_ratio', default=1)
     parser.add_argument('--stride',
                         help='stride used when running prediction tasks', default=3)
     parser.add_argument('--num-epochs',
@@ -82,6 +84,8 @@ if __name__ == "__main__":
     seq_length = int(args.seq_length)
     stride = int(args.stride)
     lr = float(args.learning_rate)
+
+    assert seq_length % int(args.in_out_ratio) == 0
 
     normalize = True
     train_dataloader, norm_data = load_dataloader(args, "training", normalize)

@@ -1,10 +1,11 @@
 python train-seq2seq.py --task conversion \
-                        --data-path test-folder \
-                        --model-file-path model.pt \
+                        --data-path /groups/MotionPred/motion-inference/full-body/full-set-1 \
+                        --model-file-path models/model.pt \
                         --representation quaternions \
                         --batch-size=32 \
                         --seq-length=30 \
                         --downsample=6 \
+                        --in-out-ratio=5 \
                         --stride=30 \
                         --learning-rate=0.001 \
                         --num-epochs=5 \
