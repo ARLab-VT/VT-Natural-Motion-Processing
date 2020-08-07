@@ -152,9 +152,12 @@ class Skeleton:
         for i in range(orientations.shape[0]):
             ax = fig.add_subplot(1, orientations.shape[0], i+1, projection='3d')
 
-            lines = [ax.plot([0], [0], [0])[0] for _ in range(6)]
-            
-            self._setup_axis(ax, limits, titles, azim, elev)
+            lines = [ax.plot([0], [0], [0])[0] for _ in range(6)]            
+
+            self._setup_axis(ax, limits, azim, elev)
+
+            if titles is not None:
+                ax.set_title(titles[i])
 
             update_lines(i, data, lines)
 
@@ -164,15 +167,12 @@ class Skeleton:
             fig.savefig(figname, bbox_inches='tight')
         return fig
 
-    def _setup_axis(self, ax, limits, titles, azim, elev):
+    def _setup_axis(self, ax, limits, azim, elev):
         ax.set_xlim3d(limits)
         ax.set_ylim3d(limits)
         ax.set_zlim3d(limits)
 
         ax.grid(False)
-
-        if titles is not None:
-            ax.set_title(titles[i])
 
         ax.set_xticks([])
         ax.set_yticks([])
