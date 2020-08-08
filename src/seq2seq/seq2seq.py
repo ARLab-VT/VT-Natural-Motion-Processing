@@ -1,12 +1,31 @@
+#!/usr/bin/env python
+# coding: utf-8
+"""
+Seq2Seq Encoders and Decoders.
+
+Reference:
+  [1] https://pytorch.org/tutorials/intermediate/seq2seq_translation_tutorial.html
+"""
 import torch
 from torch import nn
-from torch import optim
-from torch import Tensor
 import torch.nn.functional as F
 
 
 class EncoderRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, dropout=0.0, bidirectional=False):
+    """An encoder for seq2seq architectures."""
+
+    def __init__(self, input_size, hidden_size,
+                 dropout=0.0, bidirectional=False):
+        """Initialize encoder for use with decoder in seq2seq architecture.
+
+        Args:
+            input_size (int): Number of features in the input
+            hidden_size (int): Number of hidden units in the GRU layer
+            dropout (float, optional): Dropout applied after GRU layer.
+                Defaults to 0.0.
+            bidirectional (bool, optional): Whether encoder is bidirectional.
+                Defaults to False.
+        """
         super(EncoderRNN, self).__init__()
 
         self.hidden_size = hidden_size
@@ -19,18 +38,44 @@ class EncoderRNN(nn.Module):
         self.fc = nn.Linear(hidden_size * self.directions, hidden_size)
 
     def forward(self, input):
+        """Forward pass through encoder.
+
+        Args:
+            input (torch.tensor): (seq_len,
+                                   batch_size,
+                                   input_size)
+
+        Returns:
+            tuple: Returns output and hidden state of decoder.
+                output (torch.Tensor): (seq_len,
+                                        batch_size,
+                                        directions*hidden_size)
+                hidden (torch.Tensor): (1, batch_size, hidden_size)
+        """
         output, hidden = self.gru(input)
         output = self.dropout(output)
 
         if self.bidirectional:
             hidden = torch.tanh(
-                self.fc(torch.cat((hidden[-2, :, :], hidden[-1, :, :]), dim=1))).unsqueeze(0)
+                self.fc(torch.cat((hidden[-2, :, :],
+                                   hidden[-1, :, :]), dim=1))).unsqueeze(0)
 
         return output, hidden
 
 
 class DecoderRNN(nn.Module):
+    """A decoder for use in seq2seq architectures."""
+
     def __init__(self, input_size, hidden_size, output_size, dropout=0.0):
+        """Initialize DecoderRNN.
+
+        Args:
+            input_size (int): number of features in input
+            hidden_size (int): number of hidden units in GRU layer
+            output_size (int): number of features in output
+            dropout (float, optional): Dropout applied after GRU layer.
+                Defaults to 0.0.
+        """
         super(DecoderRNN, self).__init__()
         self.hidden_size = hidden_size
 
@@ -39,42 +84,73 @@ class DecoderRNN(nn.Module):
         self.out = nn.Linear(hidden_size, output_size)
 
     def forward(self, input, hidden):
+        """Forward pass through decoder.
+
+        Args:
+            input (torch.Tensor): input batch to pass through RNN
+                (1, batch_size, input_size)
+            hidden (torch.Tensor): hidden state of the decoder
+                (1, batch_size, hidden_size)
+
+        Returns:
+            tuple: Returns output and hidden state of decoder.
+                output (torch.Tensor): (1, batch_size, output_size)
+                hidden (torch.Tensor): (1, batch_size, hidden_size)
+        """
         output, hidden = self.gru(input, hidden)
         output = self.dropout(output)
         output = self.out(output)
-        return output + input, hidden
-
-    def initHidden(self):
-        return torch.zeros(1, 1, self.hidden_size, device=device)
+        return output, hidden
 
 
 class AttnDecoderRNN(nn.Module):
-    def __init__(self, output_dim, features_dim, enc_hidden_size, dec_hidden_size, attention, bidirectional_encoder=False):
+    """A decoder with an attention layer for use in seq2seq architectures."""
+
+    def __init__(self, output_size, feature_size, enc_hidden_size,
+                 dec_hidden_size, attention, bidirectional_encoder=False):
+        """Initialize AttnDecoderRNN.
+
+        Args:
+            output_size (int): size of output
+            features_size (int): number of features in input batch
+            enc_hidden_size (int): hidden size of encoder
+            dec_hidden_size (int): hidden size of decoder
+            attention (str): attention method for use in Attention layer
+            bidirectional_encoder (bool, optional): Whether encoder used with
+                decoder is bidirectional. Defaults to False.
+        """
         super().__init__()
 
         self.enc_hidden_size = enc_hidden_size
         self.dec_hidden_size = dec_hidden_size
-        self.output_dim = output_dim
-        self.features_dim = features_dim
+        self.output_size = output_size
+        self.feature_size = feature_size
         self.attention = attention
 
         self.directions = 2 if bidirectional_encoder else 1
 
-        self.rnn = nn.GRU(self.directions * enc_hidden_size +
-                          features_dim, dec_hidden_size)
+        self.rnn = nn.GRU(self.directions * enc_hidden_size + feature_size,
+                          dec_hidden_size)
 
         self.out = nn.Linear(self.directions * enc_hidden_size +
-                             dec_hidden_size + features_dim, output_dim)
+                             dec_hidden_size + feature_size,
+                             output_size)
 
     def forward(self, input, hidden, annotations):
-        """
-        Computes an attention score
-        :param input: (1, batch_size, directions * enc_hidden_dim)
-        :param hidden: (1, batch_size, dec_hidden_dim)
-        :param annotations: (seq_len, batch_size, hidden_dim)
-        :return: output (1, batch_size, output_dim) and hidden (1, batch_size, dec_hidden_dim)
-        """
+        """Forward pass through decoder.
 
+        Args:
+            input (torch.Tensor): (1, batch_size, feature_size)
+            hidden (torch.Tensor): (1, batch_size, dec_hidden_size)
+            annotations (torch.Tensor): (seq_len,
+                                         batch_size,
+                                         directions * enc_hidden_size)
+
+        Returns:
+            tuple: Returns output and hidden state of decoder.
+                output (torch.Tensor): (1, batch_size, output_size)
+                hidden (torch.Tensor): (1, batch_size, dec_hidden_size)
+        """
         attention = self.attention(hidden, annotations)
 
         attention = attention.unsqueeze(1)
@@ -97,13 +173,27 @@ class AttnDecoderRNN(nn.Module):
 
         output = self.out(torch.cat((output, context_vector, input), dim=1))
 
-        # output = [batch_size, output_dim]
+        # output = [batch_size, output_size]
 
-        return output.unsqueeze(0), hidden    
+        return output.unsqueeze(0), hidden
 
 
 class Attention(nn.Module):
-    def __init__(self, hidden_size, batch_size, method, bidirectional_encoder=False):
+    """An Attention layer for the AttnDecoder with multiple methods."""
+
+    def __init__(self, hidden_size, batch_size,
+                 method, bidirectional_encoder=False):
+        """Initialize Attention layer.
+
+        Args:
+            hidden_size (int): Size of hidden state in decoder.
+            batch_size (int): Size of batch, used for shape checks.
+            method (str): Attention technique/method to use. Supports
+                general, biased-general, activated-general, dot, add, and
+                concat.
+            bidirectional_encoder (bool, optional): Whether encoder used with
+                decoder is bidirectional. Defaults to False.
+        """
         super().__init__()
 
         self.batch_size = batch_size
@@ -111,12 +201,12 @@ class Attention(nn.Module):
         self.method = method
         self.directions = 2 if bidirectional_encoder else 1
 
-        if method in ['general', 'biased-general', 'activated-general']:
-            bias = not(method == 'general')
+        if method in ["general", "biased-general", "activated-general"]:
+            bias = not(method == "general")
             self.Wa = nn.Linear(hidden_size,
                                 self.directions * hidden_size,
                                 bias=bias)
-        elif method == 'add':
+        elif method == "add":
             self.Wa = nn.Linear((self.directions * hidden_size),
                                 hidden_size,
                                 bias=False)
@@ -124,19 +214,23 @@ class Attention(nn.Module):
                                 hidden_size,
                                 bias=False)
             self.va = nn.Parameter(torch.rand(hidden_size))
-        elif method == 'concat':
+        elif method == "concat":
             self.Wa = nn.Linear((self.directions * hidden_size) + hidden_size,
                                 hidden_size, bias=False)
             self.va = nn.Parameter(torch.rand(hidden_size))
 
     def forward(self, hidden, annotations):
-        """
-        Computes an attention score
-        :param hidden: (1, batch_size, hidden_size)
-        :param annotations: (seq_len, batch_size, directions * hidden_size)
-        :return: a softmax score (batch_size)
-        """
+        """Forward pass through attention layer.
 
+        Args:
+            hidden (torch.Tensor): (1, batch_size, hidden_size)
+            annotations (torch.Tensor): (seq_len,
+                                           batch_size,
+                                           directions * hidden_size)
+
+        Returns:
+            torch.Tensor: (batch_size, seq_len)
+        """
         assert list(hidden.shape) == [1, self.batch_size, self.hidden_size]
 
         assert self.batch_size == annotations.shape[1]
@@ -160,21 +254,25 @@ class Attention(nn.Module):
         return F.softmax(score, dim=1)
 
     def _score(self, hidden, annotations):
-        """
-        Computes an attention score
-        :param hidden: (batch_size, hidden_size)
-        :param annotations: (batch_size, seq_len, directions * hidden_size)
-        :return: a score (batch_size, seq_len)
-        """
+        """Compute an attention score with hidden state and annotations.
 
-        if 'general' in self.method:
+        Args:
+            hidden (torch.Tensor): (batch_size, hidden_size)
+            annotations (torch.Tensor): (batch_size,
+                                         seq_len,
+                                         directions * hidden_size)
+
+        Returns:
+            torch.Tensor: (batch_size, seq_len)
+        """
+        if "general" in self.method:
             x = self.Wa(hidden)
 
             x = x.unsqueeze(-1)
 
             score = annotations.bmm(x)
 
-            if self.method == 'activated-general':
+            if self.method == "activated-general":
                 score = torch.tanh(score)
 
             assert list(score.shape) == [self.batch_size,
@@ -185,22 +283,22 @@ class Attention(nn.Module):
 
             return score
 
-        elif self.method == 'dot':
-            hidden = hidden.unsqueeze(-1)     
-            
+        elif self.method == "dot":
+            hidden = hidden.unsqueeze(-1)
+
             hidden = hidden.repeat(1, self.directions, 1)
-            
+
             score = annotations.bmm(hidden)
-            
+
             assert list(score.shape) == [self.batch_size,
                                          self.seq_len,
                                          1]
-           
+
             score = score.squeeze(-1)
 
             return score
 
-        elif self.method == 'add':
+        elif self.method == "add":
             x1 = self.Wa(annotations)
 
             x2 = self.Wb(hidden)
@@ -229,7 +327,7 @@ class Attention(nn.Module):
 
             return score
 
-        elif self.method == 'concat':
+        elif self.method == "concat":
             hidden = hidden.unsqueeze(1)
 
             hidden = hidden.repeat(1, self.seq_len, 1)

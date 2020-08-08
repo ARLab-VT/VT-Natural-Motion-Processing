@@ -1,30 +1,29 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import math
-from .conversions import *
-from .logging import logger
 
-class ExpmapToQuatLoss(nn.Module):
-    def __init__(self):
-        super(ExpmapToQuatLoss, self).__init__()
-
-    def forward(self, predictions, targets):
-        predictions = predictions.view(-1,3)
-        targets = targets.contiguous().view(-1,3)
-
-        predictions = rotMat_to_quat(expmap_to_rotMat(predictions.double()))
-        targets = rotMat_to_quat(expmap_to_rotMat(targets.double()))
-
-        return F.l1_loss(predictions, targets)
 
 class QuatDistance(nn.Module):
+    """Loss function for calculating cosine similarity of quaternions."""
+
     def __init__(self):
+        """Initialize QuatDistance loss."""
         super(QuatDistance, self).__init__()
 
     def forward(self, predictions, targets):
-        predictions = predictions.contiguous().view(-1,1,4)
-        targets = targets.contiguous().view(-1,4,1)
+        """Forward pass through the QuatDistance loss.
+
+        Args:
+            predictions (torch.Tensor): the predictions from the model in
+                quaternion form.
+            targets (torch.Tensor): the targets in quaternion form.
+
+        Returns:
+            torch.Tensor: average angular difference in degrees between
+            quaternions in predictions and targets.
+        """
+        predictions = predictions.contiguous().view(-1, 1, 4)
+        targets = targets.contiguous().view(-1, 4, 1)
 
         inner_prod = torch.bmm(predictions, targets).view(-1)
 

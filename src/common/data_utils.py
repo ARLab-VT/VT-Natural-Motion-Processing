@@ -1,37 +1,57 @@
+import torch
 import numpy as np
-import pandas as pd
 import warnings
 import h5py
 import math
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import RobustScaler
 import os
-from .logging import *
+from .logging import logger
 import sys
-from .conversions import *
 from torch.utils.data import TensorDataset, DataLoader
 
+
 class XSensDataIndices:
+    """XSensDataIndices helps with retrieving data.
+
+    XSens has a data layout which requires interfacing data measurements
+    (position, orientation, etc.) with places (RightLowerLeg, RightWrist)
+    where those measurements are available.
+    """
+
     def __init__(self):
-        sensor_group = ['sensorFreeAcceleration',
-                        'sensorMagneticField',
-                        'sensorOrientation',
-                        'normSensorOrientation',
-                        'normSensorAcceleration']
+        """Initialize object for use in reading data from .h5 files."""
+        sensor_group = ["sensorFreeAcceleration",
+                        "sensorMagneticField",
+                        "sensorOrientation"]
 
-        segment_group = ['position', 'normPositions', 'velocity', 'acceleration', 'normAcceleration',
-                         'sternumNormAcceleration', 'angularVelocity', 'angularAcceleration',
-                         'orientation', 'normOrientation', 'normExpmapOrientation', 'sternumNormOrientation']
+        segment_group = ["position", "normPositions",
+                         "velocity", "acceleration",
+                         "normAcceleration", "sternumNormAcceleration",
+                         "angularVelocity", "angularAcceleration",
+                         "orientation", "normOrientation",
+                         "sternumNormOrientation"]
 
-        joint_group = ['jointAngle', 'jointAngleXZY']
+        joint_group = ["jointAngle", "jointAngleXZY"]
 
-        joint_ergo_group = ['jointAngleErgo', 'jointAngleErgoXZY']
+        joint_ergo_group = ["jointAngleErgo", "jointAngleErgoXZY"]
 
         groups = [sensor_group, segment_group,
                   joint_group, joint_ergo_group]
         self._labels_to_items(groups)
 
     def __call__(self, requests):
+        """Retrieve indices using a request.
+
+        Requests are dicts that use groups like "position" as keys and
+        labels like ["Pelvis"]. Requests can be passed to an instance of
+        XSensDataIndices to retrieve the indices for the labels of each group.
+
+        Args:
+            requests (dict): maps groups to desired labels and will retrieve
+                indices for those group labels.
+
+        Returns:
+            dict: a map of the groups to the indices for the labels.
+        """
         label_indices = {}
         for label, items in requests.items():
             if label in self.label_items:
@@ -40,25 +60,35 @@ class XSensDataIndices:
 
     def _labels_to_items(self, groups):
         self.label_items = {}
-        sensors = ['Pelvis', 'T8', 'Head', 'RightShoulder', 'RightUpperArm',
-                   'RightForeArm', 'RightHand', 'LeftShoulder', 'LeftUpperArm',
-                   'LeftForeArm', 'LeftHand', 'RightUpperLeg', 'RightLowerLeg',
-                   'RightFoot', 'LeftUpperLeg', 'LeftLowerLeg', 'LeftFoot']
+        sensors = ["Pelvis", "T8", "Head", "RightShoulder", "RightUpperArm",
+                   "RightForeArm", "RightHand", "LeftShoulder", "LeftUpperArm",
+                   "LeftForeArm", "LeftHand", "RightUpperLeg", "RightLowerLeg",
+                   "RightFoot", "LeftUpperLeg", "LeftLowerLeg", "LeftFoot"]
 
-        segments = ['Pelvis', 'L5', 'L3', 'T12', 'T8', 'Neck', 'Head',
-                    'RightShoulder', 'RightUpperArm', 'RightForeArm', 'RightHand',
-                    'LeftShoulder', 'LeftUpperArm', 'LeftForeArm', 'LeftHand',
-                    'RightUpperLeg', 'RightLowerLeg', 'RightFoot', 'RightToe',
-                    'LeftUpperLeg', 'LeftLowerLeg', 'LeftFoot', 'LeftToe']
+        segments = ["Pelvis", "L5", "L3", "T12",
+                    "T8", "Neck", "Head",
+                    "RightShoulder", "RightUpperArm",
+                    "RightForeArm", "RightHand",
+                    "LeftShoulder", "LeftUpperArm",
+                    "LeftForeArm", "LeftHand",
+                    "RightUpperLeg", "RightLowerLeg",
+                    "RightFoot", "RightToe",
+                    "LeftUpperLeg", "LeftLowerLeg",
+                    "LeftFoot", "LeftToe"]
 
-        joints = ['jL5S1', 'jL4L3', 'jL1T12', 'jT9T8', 'jT1C7', 'jC1Head',
-                  'jRightT4Shoulder', 'jRightShoulder', 'jRightElbow', 'jRightWrist',
-                  'jLeftT4Shoulder', 'jLeftShoulder', 'jLeftElbow', 'jLeftWrist',
-                  'jRightHip', 'jRightKnee', 'jRightAnkle', 'jRightBallFoot',
-                  'jLeftHip', 'jLeftKnee', 'jLeftAnkle', 'jLeftBallFoot']
+        joints = ["jL5S1", "jL4L3", "jL1T12",
+                  "jT9T8", "jT1C7", "jC1Head",
+                  "jRightT4Shoulder", "jRightShoulder",
+                  "jRightElbow", "jRightWrist",
+                  "jLeftT4Shoulder", "jLeftShoulder",
+                  "jLeftElbow", "jLeftWrist",
+                  "jRightHip", "jRightKnee",
+                  "jRightAnkle", "jRightBallFoot",
+                  "jLeftHip", "jLeftKnee",
+                  "jLeftAnkle", "jLeftBallFoot"]
 
-        ergo_joints = ['T8_Head', 'T8_LeftUpperArm', 'T8_RightUpperArm',
-                       'Pelvis_T8', 'Vertical_Pelvis', 'Vertical_T8']
+        ergo_joints = ["T8_Head", "T8_LeftUpperArm", "T8_RightUpperArm",
+                       "Pelvis_T8", "Vertical_Pelvis", "Vertical_T8"]
 
         item_groups = [sensors, segments, joints, ergo_joints]
 
@@ -69,11 +99,13 @@ class XSensDataIndices:
     def _request(self, req_label, req_items):
         valid_items = self.label_items[req_label]
 
-        if 'all' in req_items:
+        if "all" in req_items:
             req_items = valid_items
 
         num_valid_items = len(valid_items)
-        dims = 4 if req_label in ['orientation', 'normOrientation', 'sternumNormOrientation', 'normSensorOrientation'] else 3
+        orientation_groups = ["orientation", "normOrientation",
+                              "sternumNormOrientation"]
+        dims = 4 if req_label in orientation_groups else 3
 
         indices = [list(range(i, i+dims))
                    for i in range(0, dims*num_valid_items, dims)]
@@ -94,198 +126,46 @@ class XSensDataIndices:
         return mapped_indices
 
 
-def add_expmap_orientations(filepaths, group_name, new_group_name):
-    for filepath in filepaths:
-        try:
-            h5_file = h5py.File(filepath, 'r+')
-        except OSError:
-            print("OSError: Unable to open file {}".format(filepath))
-            continue
-
-        quat = torch.Tensor(h5_file[group_name][:, :]) 
-        quat = quat.view(quat.shape[1], quat.shape[0])
-
-        old_shape = quat.shape
-        quat = quat.reshape(-1, 4)
-
-        expmap = quat_to_expmap(quat)
-        expmap = expmap.view(old_shape[0], old_shape[1]//4*3)
-        expmap = expmap.view(expmap.shape[1], expmap.shape[0])
-
-        try:    
-            print("Writing to file {}".format(filepath))
-            h5_file.create_dataset(new_group_name, data=expmap)
-        except RuntimeError:
-            print("RuntimeError: Unable to create link (name already exists) in {}".format(
-                  filepath))
-        h5_file.close()
-
-
-def add_normalized_positions(filepaths, new_group_name):
-    for filepath in filepaths:
-        try:
-            h5_file = h5py.File(filepath, 'r+')
-        except OSError:
-            print("OSError: Unable to open file {}".format(filepath))
-            continue
-
-        quat = np.array(h5_file['orientation'][:, :]) 
-        quat = quat.reshape(quat.shape[1], quat.shape[0])
-        quat = quat.reshape(quat.shape[0], -1, 4)
-
-        pos = np.array(h5_file['position'][:, :])
-        pos = pos.reshape(pos.shape[1], pos.shape[0])
-        pos = pos.reshape(pos.shape[0], -1, 3)
-
-        quat = qfix(quat)
-
-        norm_pos = np.zeros(pos.shape)
-
-        pelvis_rot = np.linalg.inv(quat_to_rotMat(torch.tensor(quat[:, 0, :])))
-        pelvis_pos = pos[:, 0, :]
-        for i in range(0, quat.shape[1]):
-            relative_pos = np.expand_dims(pos[:, i, :] - pelvis_pos, axis=2)
-            norm_pos[:, i, :] = np.squeeze(np.matmul(pelvis_rot, relative_pos), axis=2)
-
-        norm_pos = norm_pos.reshape(norm_pos.shape[0], -1) 
-        norm_pos = norm_pos.reshape(norm_pos.shape[1], norm_pos.shape[0])
-
-        try:            
-            print("Writing to file {}".format(filepath))
-            h5_file.create_dataset(new_group_name, data=norm_pos)
-        except RuntimeError:
-            print("RuntimeError: Unable to create link (name already exists) in {}".format(
-                  filepath))
-        h5_file.close()
-
-def add_normalized_accelerations(filepaths, group_name, new_group_name, root=0):
-    for filepath in filepaths:
-        try:
-            h5_file = h5py.File(filepath, 'r+')
-        except OSError:
-            print("OSError: Unable to open file {}".format(filepath))
-            continue
-
-        quat = np.array(h5_file['orientation'][:, :]) 
-        quat = quat.reshape(quat.shape[1], quat.shape[0])
-        quat = quat.reshape(quat.shape[0], -1, 4)
-
-        acc = np.array(h5_file[group_name][:, :])
-        acc = acc.reshape(acc.shape[1], acc.shape[0])
-        acc = acc.reshape(acc.shape[0], -1, 3)
-
-        quat = qfix(quat)
-
-        norm_acc = np.zeros(acc.shape)
-
-        root_rot = np.linalg.inv(quat_to_rotMat(torch.tensor(quat[:, root, :])))
-        root_acc = acc[:, root, :]
-        for i in range(0, acc.shape[1]):
-            relative_acc = np.expand_dims(acc[:, i, :] - root_acc, axis=2)
-            norm_acc[:, i, :] = np.squeeze(np.matmul(root_rot, relative_acc), axis=2)
-
-        norm_acc = norm_acc.reshape(norm_acc.shape[0], -1) 
-        norm_acc = norm_acc.reshape(norm_acc.shape[1], norm_acc.shape[0])
-
-        try:            
-            print("Writing to file {}".format(filepath))
-            h5_file.create_dataset(new_group_name, data=norm_acc)
-        except RuntimeError:
-            print("RuntimeError: Unable to create link (name already exists) in {}".format(
-                  filepath))
-        h5_file.close()
-
-
-def add_normalized_quaternions(filepaths, group_name, new_group_name, root=0):
-    for filepath in filepaths:
-        try:
-            h5_file = h5py.File(filepath, 'r+')
-        except OSError:
-            print("OSError: Unable to open file {}".format(filepath))
-            continue
-
-        quat = np.array(h5_file[group_name][:, :]) 
-        quat = quat.reshape(quat.shape[1], quat.shape[0])
-        quat = quat.reshape(quat.shape[0], -1, 4)
-
-        quat = qfix(quat)
-
-        norm_quat = np.zeros(quat.shape)
-
-        root_rotMat = np.linalg.inv(quat_to_rotMat(torch.tensor(quat[:, root, :])))
-        for i in range(0, quat.shape[1]):
-            rotMat = quat_to_rotMat(torch.tensor(quat[:, i, :])) 
-            norm_rotMat = np.matmul(root_rotMat, rotMat)
-            norm_quat[:, i, :] = rotMat_to_quat(norm_rotMat)
-
-        norm_quat = norm_quat.reshape(norm_quat.shape[0], -1) 
-        norm_quat = norm_quat.reshape(norm_quat.shape[1], norm_quat.shape[0])
-
-        try:            
-            print("Writing to file {}".format(filepath))
-            h5_file.create_dataset(new_group_name, data=norm_quat)
-        except RuntimeError:
-            print("RuntimeError: Unable to create link (name already exists) in {}".format(
-                  filepath))
-        h5_file.close()
-
-
-def qmul(q, r):
-    """
-    Multiply quaternion(s) q with quaternion(s) r.
-    Expects two equally-sized tensors of shape (*, 4), where * denotes any number of dimensions.
-    Returns q*r as a tensor of shape (*, 4).
-    """
-    assert q.shape[-1] == 4
-    assert r.shape[-1] == 4
-    
-    original_shape = q.shape
-    
-    # Compute outer product
-    terms = torch.bmm(r.view(-1, 4, 1), q.view(-1, 1, 4))
-
-    w = terms[:, 0, 0] - terms[:, 1, 1] - terms[:, 2, 2] - terms[:, 3, 3]
-    x = terms[:, 0, 1] + terms[:, 1, 0] - terms[:, 2, 3] + terms[:, 3, 2]
-    y = terms[:, 0, 2] + terms[:, 1, 3] + terms[:, 2, 0] - terms[:, 3, 1]
-    z = terms[:, 0, 3] - terms[:, 1, 2] + terms[:, 2, 1] + terms[:, 3, 0]
-    return torch.stack((w, x, y, z), dim=1).view(original_shape)
-
-
-def qfix(q):
-    """
-    Borrowed from QuaterNet: 
-    https://github.com/facebookresearch/QuaterNet/blob/9d8485b732b0a44b99b6cf4b12d3915703507ddc/common/quaternion.py#L119    
-
-    Enforce quaternion continuity across the time dimension by selecting
-    the representation (q or -q) with minimal distance (or, equivalently, maximal dot product)
-    between two consecutive frames.
-    
-    Expects a tensor of shape (L, J, 4), where L is the sequence length and J is the number of joints.
-    Returns a tensor of the same shape.
-    """
-    assert len(q.shape) == 3
-    assert q.shape[-1] == 4
-    
-    result = q.copy()
-    dot_products = np.sum(q[1:]*q[:-1], axis=2)
-    mask = dot_products < 0
-    mask = (np.cumsum(mask, axis=0)%2).astype(bool)
-    result[1:][mask] *= -1
-    return result
-
-
 def discard_remainder(data, seq_length):
+    """Discard data that does not fit inside sequence length.
+
+    Args:
+        data (np.ndarray): data to truncate
+        seq_length (int): sequence length to find data that doesn"t fit into
+            sequences
+
+    Returns:
+        np.ndarray: truncated data
+    """
     new_row_num = data.shape[0] - (data.shape[0] % seq_length)
     data = data[:new_row_num]
     return data
 
 
-def stride_downsample_sequences(data, seq_length, stride, downsample, offset=0, in_out_ratio=1):
+def stride_downsample_sequences(data, seq_length, stride, downsample,
+                                offset=0, in_out_ratio=1):
+    """Build sequences with an array of data tensor.
+
+    Args:
+        data (np.ndarray): data to turn into sequences
+        seq_length (int): sequence length of the original sequence (e.g., 30
+            frames will be downsampled to 5 frames if downsample is 6.)
+        stride (int): step size over data when looping over frames
+        downsample (int): amount to downsample data (e.g., 6 will take 240 Hz
+            to 40 Hz.)
+        offset (int, optional): offset for index when looping; useful for the
+            prediction task when making output data. Defaults to 0.
+        in_out_ratio (int, optional): ratio of input to output; useful for the
+            conversion task when making output data. Defaults to 1.
+
+    Returns:
+        np.ndarray: data broken into sequences
+    """
     samples = []
     for i in range(0, data.shape[0] - 2*seq_length, stride):
         i_shift = i+offset
         sample = data[i_shift:i_shift+seq_length:downsample, :]
-        
+
         ratio_shift = sample.shape[0] - sample.shape[0]//in_out_ratio
         sample = sample[ratio_shift:, :]
         samples.append(sample)
@@ -294,6 +174,17 @@ def stride_downsample_sequences(data, seq_length, stride, downsample, offset=0, 
 
 
 def read_h5(filepaths, requests):
+    """Read data from an h5 file and store in a dataset dict.
+
+    Primarily used for building a dataset (see build-dataset.py)
+
+    Args:
+        filepaths (list): list of file paths to draw data from.
+        requests (dict): dictionary of requests to make to files.
+
+    Returns:
+        dict: dictionary containing files mapped to labels mapped to data
+    """
     xsensIndices = XSensDataIndices()
     indices = xsensIndices(requests)
 
@@ -301,7 +192,11 @@ def read_h5(filepaths, requests):
 
     h5_files = []
     for filepath in filepaths:
-        h5_file = h5py.File(filepath, 'r')
+        try:
+            h5_file = h5py.File(filepath, "r+")
+        except OSError:
+            logger.info(f"OSError: Unable to open file {filepath}")
+            continue
         h5_files.append((h5_file, os.path.basename(filepath)))
 
     dataset = {}
@@ -310,10 +205,11 @@ def read_h5(filepaths, requests):
         for label in indices:
             label_indices = flatten(indices[label])
             label_indices.sort()
-            
+
             file_data = np.array(h5_file[label])
-            file_data = file_data.reshape(file_data.shape[1], file_data.shape[0])
-            
+            file_data = file_data.reshape(file_data.shape[1],
+                                          file_data.shape[0])
+
             data = np.array(file_data[:, label_indices])
 
             dataset[filename][label] = data
@@ -323,28 +219,51 @@ def read_h5(filepaths, requests):
     return dataset
 
 
-def read_variables(h5_file_path, task, seq_length, stride, downsample, in_out_ratio=1):
+def read_variables(h5_file_path, task, seq_length, stride, downsample,
+                   in_out_ratio=1):
+    """Read data from dataset and store in X and y variables.
+
+    Args:
+        h5_file_path (str): h5 file containing dataset built previously
+        task (str): either prediction or conversion; task that will be modeled
+            by the machine learning model
+        seq_length (int): original sequence length before downsampling data
+        stride (int): step size over data when building sequences
+        downsample (int): amount to downsample data by (e.g., 6 to reduce
+            240 Hz sampling rate to 40 Hz.)
+        in_out_ratio (int, optional): input length compared to output length.
+            Defaults to 1.
+
+    Returns:
+        tuple: returns a tuple of variables X and y for use in a machine
+            learning task.
+    """
     X, y = None, None
-    h5_file = h5py.File(h5_file_path, 'r')
+    h5_file = h5py.File(h5_file_path, "r")
     for filename in h5_file.keys():
-        X_temp = h5_file[filename]['X']
+        X_temp = h5_file[filename]["X"]
         X_temp = discard_remainder(X_temp, 2*seq_length)
 
-        if task == 'prediction':
-            y_temp = stride_downsample_sequences(X_temp, seq_length, stride, downsample, offset=seq_length)
-        elif task == 'conversion':
-            y_temp = h5_file[filename]['Y']
+        if task == "prediction":
+            y_temp = stride_downsample_sequences(X_temp, seq_length, stride,
+                                                 downsample, offset=seq_length)
+        elif task == "conversion":
+            y_temp = h5_file[filename]["Y"]
             y_temp = discard_remainder(y_temp, 2*seq_length)
-            y_temp = stride_downsample_sequences(y_temp, seq_length, stride, downsample, in_out_ratio=in_out_ratio)
+            y_temp = stride_downsample_sequences(y_temp, seq_length, stride,
+                                                 downsample,
+                                                 in_out_ratio=in_out_ratio)
         else:
-            logger.error("Task must be either prediction or conversion, found {}".format(task))
+            logger.error(("Task must be either prediction or conversion, "
+                          f"found {task}"))
             sys.exit()
 
-        X_temp = stride_downsample_sequences(X_temp, seq_length, stride, downsample)
-        
+        X_temp = stride_downsample_sequences(X_temp, seq_length,
+                                             stride, downsample)
+
         assert not np.any(np.isnan(X_temp))
         assert not np.any(np.isnan(y_temp))
-        
+
         if X is None and y is None:
             X = torch.tensor(X_temp)
             y = torch.tensor(y_temp)
@@ -355,41 +274,64 @@ def read_variables(h5_file_path, task, seq_length, stride, downsample, in_out_ra
     return X, y
 
 
-def load_dataloader(args, type, normalize, norm_data=None, shuffle=True): 
-    file_path = args.data_path + '/' + type + '.h5'
+def load_dataloader(args, set_type, normalize, norm_data=None, shuffle=True):
+    """Create dataloaders for PyTorch machine learning tasks.
+
+    Args:
+        args (argparse.Namespace): contains accessible arguments passed in
+            to module
+        set_type (str): set to read from when gathering data (either training,
+            validation or testing sets)
+        normalize (bool): whether to normalize the data before adding to
+            dataloader
+        norm_data (tuple, optional): if passed will contain mean and std_dev
+            data to normalize input data with. Defaults to None.
+        shuffle (bool, optional): whether to shuffle the data stored in the
+            dataloader. Defaults to True.
+
+    Returns:
+        tuple: returns a tuple containing the DataLoader and the normalization
+            data
+    """
+    file_path = args.data_path + "/" + set_type + ".h5"
     seq_length = int(args.seq_length)
     downsample = int(args.downsample)
     batch_size = int(args.batch_size)
     in_out_ratio = int(args.in_out_ratio)
-    stride = int(args.stride) if type == 'training' else seq_length//2    
+    stride = int(args.stride) if set_type == "training" else seq_length//2
 
-    logger.info("Retrieving {} data for sequences {} ms long and downsampling to {} Hz...".format(type, int(seq_length/240*1000), 240/downsample))
+    logger.info((f"Retrieving {set_type} data "
+                 f"for sequences {int(seq_length/240*1000)} ms long and "
+                 f"downsampling to {240/downsample} Hz..."))
 
-    X, y = read_variables(file_path, args.task, seq_length, stride, downsample, in_out_ratio=in_out_ratio)
+    X, y = read_variables(file_path, args.task, seq_length, stride, downsample,
+                          in_out_ratio=in_out_ratio)
 
     if normalize:
         mean, std_dev = None, None
         if norm_data is None:
             mean, std_dev = X.mean(dim=0), X.std(dim=0)
             norm_data = (mean, std_dev)
-            with h5py.File(args.data_path + '/normalization.h5','w') as f:
-                f['mean'], f['std_dev'] = mean, std_dev
+            with h5py.File(args.data_path + "/normalization.h5", "w") as f:
+                f["mean"], f["std_dev"] = mean, std_dev
         else:
             mean, std_dev = norm_data
         X = X.sub(mean).div(std_dev + 1e-8)
 
-    logger.info("Data for {} have shapes (X, y): {}, {}".format(type, X.shape, y.shape))
+    logger.info(f"Data for {set_type} have shapes "
+                f"(X, y): {X.shape}, {y.shape}")
 
     X = X.view(-1, math.ceil(seq_length/downsample), X.shape[1])
     y = y.view(-1, math.ceil(seq_length/(downsample*in_out_ratio)), y.shape[1])
 
-    logger.info("Reshaped {} shapes (X, y): {}, {}".format(type, X.shape, y.shape))
-    
-    dataset = TensorDataset(X, y)
-    
-    shuffle = True if type == 'training' else False
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=True)
+    logger.info(f"Reshaped {set_type} shapes (X, y): {X.shape}, {y.shape}")
 
-    logger.info("Number of {} samples: {}".format(type, len(dataset)))
+    dataset = TensorDataset(X, y)
+
+    shuffle = True if set_type == "training" else False
+    dataloader = DataLoader(dataset, batch_size=batch_size,
+                            shuffle=shuffle, drop_last=True)
+
+    logger.info(f"Number of {set_type} samples: {len(dataset)}")
 
     return dataloader, norm_data
