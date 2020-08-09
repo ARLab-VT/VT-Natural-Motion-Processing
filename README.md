@@ -26,7 +26,7 @@
 
 - Clone the repo locally
 - Setup the conda environment
-    - `$ conda env -n vt-nmp python=3.7`
+    - `$ conda create -n vt-nmp python=3.7`
 - Install requirements
     - `$ pip install -r requirements.txt`
 
