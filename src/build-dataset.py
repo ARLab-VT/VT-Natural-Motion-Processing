@@ -131,7 +131,7 @@ def map_requests(tasks, labels):
 
 
 def write_dataset(filepath_groups, variable, experiment_setup, requests):
-    """Write to data to training, validation, testing .h5 files.
+    """Write data to training, validation, testing .h5 files.
 
     Args:
         filepath_groups (list): list of tuples associate files to data group

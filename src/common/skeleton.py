@@ -84,7 +84,7 @@ class Skeleton:
 
         positions = torch.zeros([len(self.segments),
                                  orientations.shape[0],
-                                 3], dtype=torch.float64)
+                                 3], dtype=torch.float32)
 
         for i, segment in enumerate(self.segments):
             parent = self.segment_parents[segment]
@@ -97,7 +97,7 @@ class Skeleton:
 
                 x_B = torch.tensor(
                     self.segment_positions_in_parent_frame[segment],
-                    dtype=torch.float64)
+                    dtype=torch.float32)
 
                 x_B = x_B.view(1, -1, 1).repeat(orientations.shape[0], 1, 1)
 
@@ -140,12 +140,15 @@ class Skeleton:
         fig = plt.figure()
         ax = p3.Axes3D(fig)
 
+        if title is not None:
+            ax.set_title(title)
+
         data = self.forward_kinematics(orientations)
 
         lines = [ax.plot([0], [0], [0])[0] for _ in range(6)]
         limits = [-1.0, 1.0]
 
-        self._setup_axis(ax, limits, title, azim, elev)
+        self._setup_axis(ax, limits, azim, elev)
 
         line_ani = animation.FuncAnimation(fig,
                                            update_lines,
