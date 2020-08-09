@@ -4,6 +4,7 @@
 
 - [Layout](#project-layout)
 - [Workflow](#workflow)
+- [Dependencies](#dependencies)
 - [Conda Environment](#conda-environment)
 
 ## Project Layout
@@ -14,18 +15,20 @@
         transformers                                       
         matlab/
 
-## Workflow
+## Dependencies
+
+    numpy==1.18.1
+    h5py==2.10.0
+    matplotlib==3.1.3
+    torch==1.6.0
+
+## Setup
 
 - Clone the repo locally
 - Setup the conda environment
-    - `$ conda env create -f environment.yml`
-- Feature branches will be used for development
-    - `$ git checkout -b <descriptive-name>`
-- Make changes
-    - `$ git add <file-name>`
-    - `$ git commit -m "changes to file-name for new feature"`
-- Once the feature branch is complete and ready for a pull request, it can be pushed to the remote repository to create a pull request
-    - `$ git push origin <descriptive-name>`
+    - `$ conda env -n vt-nmp python=3.7`
+- Install requirements
+    - `$ pip install -r requirements.txt`
 
 ## Conda Environment
 
