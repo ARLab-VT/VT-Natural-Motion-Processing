@@ -1,13 +1,16 @@
 python test-transformer.py --task conversion \
-                           --data-path-parent /groups/MotionPred/motion-inference/full-body-special-sets \
-                           --figure-file-path ./posture-images/full-body/transformer-enc-histogram-special-test.pdf \
-                           --model-dir ./models/motion-inference/full-body/transformer-enc \
+                           --data-path-parent "/home/jackg7/VT-Natural-Motion-Processing/data" \
+                           --figure-file-path "/home/jackg7/VT-Natural-Motion-Processing/images/transformer-test.pdf" \
+                           --figure-title "Seq2Seq" \
+                           --model-dir "/home/jackg7/VT-Natural-Motion-Processing/models/set-2" \
+                           --full-transformer \
                            --representation quaternions \
                            --batch-size=512 \
                            --seq-length=30 \
                            --downsample=6 \
+                           --in-out-ratio=1 \
                            --stride=30 \
                            --num-heads=4 \
-                           --dim-feedforward=200 \
+                           --dim-feedforward=512 \
                            --dropout=0.0 \
                            --num-layers=2

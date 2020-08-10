@@ -1,8 +1,8 @@
 python train-transformer.py --task conversion \
+                            --data-path "/home/jackg7/VT-Natural-Motion-Processing/data/set-2" \
+                            --model-file-path "/home/jackg7/VT-Natural-Motion-Processing/models/set-2/model.pt" \
                             --full-transformer \
-                            --data-path /groups/MotionPred/motion-inference/full-body/full-set-4 \
                             --representation quaternions \
-                            --model-file-path models/model.pt \
                             --batch-size=32 \
                             --seq-length=30 \
                             --downsample=6 \
@@ -15,4 +15,4 @@ python train-transformer.py --task conversion \
                             --num-heads=4 \
                             --dim-feedforward=512 \
                             --dropout=0.0 \
-                            --num-layers=4
+                            --num-layers=2

@@ -1,6 +1,6 @@
 python train-seq2seq.py --task conversion \
-                        --data-path /groups/MotionPred/motion-inference/full-body/full-set-1 \
-                        --model-file-path models/model.pt \
+                        --data-path "/home/jackg7/VT-Natural-Motion-Processing/data/set-2" \
+                        --model-file-path "/home/jackg7/VT-Natural-Motion-Processing/models/set-2/model.pt" \
                         --representation quaternions \
                         --batch-size=32 \
                         --seq-length=30 \
@@ -8,7 +8,7 @@ python train-seq2seq.py --task conversion \
                         --in-out-ratio=5 \
                         --stride=30 \
                         --learning-rate=0.001 \
-                        --num-epochs=5 \
+                        --num-epochs=1 \
                         --hidden-size=512 \
                         --attention=dot \
                         --bidirectional
