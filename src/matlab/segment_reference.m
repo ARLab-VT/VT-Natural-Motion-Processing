@@ -1,3 +1,10 @@
+% Copyright (c) 2020-present, Assistive Robotics Lab
+% All rights reserved.
+%
+% This source code is licensed under the license found in the
+% LICENSE file in the root directory of this source tree.
+%
+
 function [segmentOrientationMap, segmentPositionMap, jointMap]= segment_reference
 % SEGREF Places all of the segments and joints into maps for
 % accessing. Necessary for reading data from MVNX files.

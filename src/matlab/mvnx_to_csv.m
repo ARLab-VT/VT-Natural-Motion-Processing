@@ -1,3 +1,10 @@
+% Copyright (c) 2020-present, Assistive Robotics Lab
+% All rights reserved.
+%
+% This source code is licensed under the license found in the
+% LICENSE file in the root directory of this source tree.
+%
+
 function data = mvnx_to_csv(file)
 %MVNX_TO_CSV File for reading in .mvnx files and converting them to .csv files.
 %   Reading the .mvnx files is expensive, so this converts orientation, position, and

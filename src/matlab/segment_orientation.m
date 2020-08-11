@@ -1,3 +1,10 @@
+% Copyright (c) 2020-present, Assistive Robotics Lab
+% All rights reserved.
+%
+% This source code is licensed under the license found in the
+% LICENSE file in the root directory of this source tree.
+%
+
 function[matrix]= segment_orientation(values, frames, index)
 % SEGMENT_ORIENTATION Re-shuffles each quaternion in data to a segment
 %

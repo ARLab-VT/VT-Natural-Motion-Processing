@@ -1,3 +1,10 @@
+% Copyright (c) 2020-present, Assistive Robotics Lab
+% All rights reserved.
+%
+% This source code is licensed under the license found in the
+% LICENSE file in the root directory of this source tree.
+%
+
 function [data,time,cal_data,extra] = load_partial_mvnx(filename,section,varargin)
 % This function allows matlab to read in larger mvnx files since it does
 % not try to load the entire file into memory which can be several GB

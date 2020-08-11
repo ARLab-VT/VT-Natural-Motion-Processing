@@ -1,3 +1,10 @@
+# Copyright (c) 2020-present, Assistive Robotics Lab
+# All rights reserved.
+#
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+#
+
 import torch
 from .rotations import quat_to_rotMat
 from .data_utils import XSensDataIndices

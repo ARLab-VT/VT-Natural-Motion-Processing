@@ -1,3 +1,10 @@
+% Copyright (c) 2020-present, Assistive Robotics Lab
+% All rights reserved.
+%
+% This source code is licensed under the license found in the
+% LICENSE file in the root directory of this source tree.
+%
+
 function [jointAngleSegments] = joint_angle_segments()
 % JOINT_ANGLE_SEGMENTS Returns a cell array containing the joint angles of
 % the XSens data file in proper order.

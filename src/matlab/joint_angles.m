@@ -1,3 +1,10 @@
+% Copyright (c) 2020-present, Assistive Robotics Lab
+% All rights reserved.
+%
+% This source code is licensed under the license found in the
+% LICENSE file in the root directory of this source tree.
+%
+
 function[matrix]= joint_angles(values, frames, index)
 % JDEG Re-shuffles each joint angle in data to a joint
 %

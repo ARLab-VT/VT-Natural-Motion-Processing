@@ -1,3 +1,12 @@
+# Copyright (c) 2018-present, Facebook, Inc.
+# All rights reserved.
+#
+# This source code is licensed under the Attribution-NonCommercial
+# 4.0 International license and is borrowed from the QuaterNet library.
+# See https://github.com/facebookresearch/QuaterNet/blob/master/LICENSE for
+# more details.
+#
+
 import torch
 import numpy as np
 
