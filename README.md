@@ -1,5 +1,7 @@
 # Virginia Tech Natural Motion Processing
 
+This repository was written to help analyze the Virginia Tech Natural Motion Dataset. The dataset contains 40 hours of unscripted human motion collected in the open world using XSens MVN Link. The dataset .zip files are available through Globus: https://bit.ly/2CoRvMa. The dataset metadata and more information is available through the Virginia Tech University Libraries: https://doi.org/10.7294/2V3W-SB92.
+
 ## Table of Contents
 
 - [Layout](#project-layout)
