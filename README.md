@@ -35,3 +35,20 @@ This repository was written to help analyze the Virginia Tech Natural Motion Dat
 ## Conda Environment
 
 An Anaconda environment is used to help with development. The environment's main dependency is PyTorch, which will be installed when setting up the workflow above.
+
+## License
+
+Please see the LICENSE for more details. If you use our code or models in your research, please cite our paper:
+
+```
+@article{geissinger2020motion,
+  title={Motion inference using sparse inertial sensors, self-supervised learning, and a new dataset of unscripted human motion},
+  author={Geissinger, Jack H and Asbeck, Alan T},
+  journal={Sensors},
+  volume={20},
+  number={21},
+  pages={6330},
+  year={2020},
+  publisher={Multidisciplinary Digital Publishing Institute}
+}
+```
